@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% set current_page = "campaigns" %}
+{% set page_title = "Кампания" %}
+{% set page_subtitle = "Сбор списка клиентов (snapshot) и просмотр" %}
+
+{% block topbar_actions %}
+<a class="btn btn-sm btn-outline-secondary" href="/admin/campaigns">
+  <i class="bi bi-arrow-left me-1"></i> Кампании
+</a>
+
+<button class="btn btn-sm btn-outline-secondary" type="button" id="cdReloadBtn">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+
+<button class="btn btn-sm btn-primary" type="button" id="cdBuildBtn">
+  <i class="bi bi-people me-1"></i> Собрать список клиентов
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0" id="cdTitle">Загрузка…</div>
+          <div class="text-muted small" id="cdMeta">—</div>
+        </div>
+        <div id="cdMsg" class="small text-muted"></div>
+      </div>
+
+      <div id="cdErr" class="text-danger small d-none mt-2"></div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>Телефон</th>
+              <th>Имя</th>
+              <th>Тир</th>
+              <th class="text-end">Покупок (90д)</th>
+              <th class="text-end">Выручка (90д)</th>
+              <th>Последняя</th>
+              <th class="text-end">Дней</th>
+              <th class="text-end">RFM</th>
+              <th class="text-end"></th>
+            </tr>
+          </thead>
+          <tbody id="cdTbody">
+            <tr><td colspan="9" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "campaign_detail";
+  window.__CAMPAIGN_ID__ = "{{ campaign_id }}";
+</script>
+{% endblock %}

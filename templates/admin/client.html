@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-3 text-muted">
+  Телефон: <span class="fw-semibold">{{ phone }}</span>
+</div>
+
+<!-- Баннер (на будущее: ДР/события). Пока скрыт, т.к. CRM схема не отдаёт is_birthday_today -->
+<div id="birthdayBanner" class="alert alert-warning d-none"></div>
+
+<div id="clientNotFound" class="alert alert-secondary d-none">
+  Клиент не найден. Проведите транзакцию — клиент создастся автоматически.
+</div>
+
+<div id="clientError" class="text-danger small d-none"></div>
+
+<div class="row g-3">
+
+  <!-- LEFT: Metrics + AI -->
+  <div class="col-12 col-lg-6">
+
+    <div class="card p-3">
+      <div class="h6 mb-3">Метрики</div>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Имя</span>
+        <span id="mFullName" class="fw-semibold">—</span>
+      </div>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Уровень</span>
+        <span id="mTier" class="badge text-bg-secondary">—</span>
+      </div>
+
+      <hr/>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Сумма покупок</span>
+        <span id="mTotalSpent" class="fw-semibold">0</span>
+      </div>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Количество покупок</span>
+        <span id="mCount" class="fw-semibold">0</span>
+      </div>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Средний чек</span>
+        <span id="mAvg" class="fw-semibold">0</span>
+      </div>
+
+      <hr/>
+
+      <div class="d-flex justify-content-between py-1">
+        <span class="text-muted">Бонусный баланс</span>
+        <span id="mBonus" class="fw-semibold">0</span>
+      </div>
+    </div>
+
+    <!-- AI (персонально по клиенту) -->
+    <div class="card p-3 mt-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">AI — подсказки по клиенту</div>
+          <div class="text-muted small">Персональные инсайты и следующий лучший шаг (Next Best Action).</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <span id="aiModeBadge" class="badge text-bg-secondary">—</span>
+          <button id="aiReloadBtn" class="btn btn-sm btn-outline-secondary" type="button">
+            <i class="bi bi-stars me-1"></i> Обновить
+          </button>
+        </div>
+      </div>
+
+      <div id="aiError" class="text-danger small d-none mt-2"></div>
+
+      <div class="mt-3">
+        <div class="text-muted small mb-2">Инсайты</div>
+        <ul id="aiInsights" class="mb-0 small">
+          <li class="text-muted">Загрузка…</li>
+        </ul>
+      </div>
+
+      <div class="mt-3">
+        <div class="text-muted small mb-2">Рекомендации</div>
+        <div id="aiRecos" class="d-flex flex-column gap-2">
+          <div class="text-muted small">Загрузка…</div>
+        </div>
+      </div>
+
+      <div class="text-muted small mt-3">
+        Endpoint: <code>POST /api/ai/ask</code> · <code>context=client</code>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Transactions -->
+  <div class="col-12 col-lg-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="h6 mb-0">История транзакций</div>
+        <a class="btn btn-sm btn-outline-secondary" href="/admin/transactions">К транзакциям</a>
+      </div>
+
+      <div class="table-responsive mt-2">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>ID</th>
+              <th>Дата</th>
+              <th class="text-end">Сумма</th>
+              <th class="text-end">Оплачено</th>
+              <th class="text-end">Списано</th>
+              <th class="text-end">Начислено</th>
+            </tr>
+          </thead>
+          <tbody id="txTableBody">
+            <tr><td colspan="6" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="text-danger small mt-2 d-none" id="txError"></div>
+      <div class="small d-none" id="txMsg"></div>
+    </div>
+  </div>
+
+  <!-- FULL WIDTH: Create transaction -->
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="h6 mb-0">Провести транзакцию</div>
+        <button id="btnReload" class="btn btn-sm btn-outline-secondary" type="button">
+          <i class="bi bi-arrow-repeat me-1"></i> Обновить
+        </button>
+      </div>
+
+      <div class="row g-2 mt-2">
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Сумма покупки (amount)</label>
+          <input class="form-control" type="number" min="0" step="1" id="fAmount" value="100000" required>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Фактически оплачено (paid_amount)</label>
+          <input class="form-control" type="number" min="0" step="1" id="fPaid" placeholder="Если пусто — возьмём amount">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Списать бонусов (redeem_points)</label>
+          <input class="form-control" type="number" min="0" step="1" id="fRedeem" value="0">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Метод оплаты (payment_method)</label>
+          <select class="form-select" id="fMethod">
+            <option value="CASH" selected>Наличка</option>
+            <option value="CARD">Карта</option>
+            <option value="TRANSFER">Перевод</option>
+            <option value="MIXED">Смешанная</option>
+            <option value="OTHER">Другое</option>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-8">
+          <label class="form-label">Комментарий (comment)</label>
+          <input class="form-control" id="fComment" placeholder="Например: № чека">
+        </div>
+
+        <div class="col-12">
+          <div class="small text-muted mb-2">
+            Если клиента нет — можно указать данные для автосоздания (опционально):
+          </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">ФИО (full_name)</label>
+          <input class="form-control" id="fName" placeholder="Например: Asym Test">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Дата рождения (birth_date)</label>
+          <input class="form-control" type="date" id="fBirth">
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Уровень</label>
+          <select class="form-select" id="fTier">
+            <option value="">Авто</option>
+            <option value="Bronze">Bronze</option>
+            <option value="Silver">Silver</option>
+            <option value="Gold">Gold</option>
+          </select>
+        </div>
+
+        <div class="col-12 d-flex justify-content-end">
+          <button class="btn btn-success" type="button" id="btnCreateTx">
+            <i class="bi bi-check2-circle me-1"></i> Отправить
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "client";
+  window.__CLIENT_PHONE__ = "{{ phone }}";
+</script>
+{% endblock %}

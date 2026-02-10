@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-outline-secondary" type="button" id="txRefreshBtn">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+
+<button class="btn btn-sm btn-success" type="button" id="txOpenCreateBtn">
+  <i class="bi bi-plus-circle me-1"></i> Создать транзакцию
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">Транзакции</div>
+          <div class="text-muted small">Поиск по телефону или просмотр всех транзакций за всё время.</div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <input id="txPhone" class="form-control" style="min-width: 280px;" placeholder="77001234567 или 87770000000"/>
+          <button class="btn btn-primary" type="button" id="txSearchBtn">
+            <i class="bi bi-search me-1"></i> Найти
+          </button>
+        </div>
+      </div>
+
+      <div class="text-muted small mt-2">
+        Подсказка: оставь поле телефона пустым и нажми “Найти” — загрузятся последние 200 транзакций.
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="h6 mb-0">Результаты</div>
+        <div class="text-muted small" id="txCount">—</div>
+      </div>
+
+      <div class="table-responsive mt-2">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>ID</th>
+              <th>Дата</th>
+              <th>Телефон</th>
+              <th class="text-end">Сумма</th>
+              <th class="text-end">Оплачено</th>
+              <th class="text-end">Списано</th>
+              <th class="text-end">Начислено</th>
+              <th>Комментарий</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="txTbody">
+            <tr><td colspan="9" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Create TX Modal -->
+<div class="modal fade" id="txCreateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <div class="h6 mb-0">Создать транзакцию</div>
+          <div class="text-muted small">Проведение транзакции выполняется здесь (создание + начисление/списание).</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="row g-2">
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Телефон</label>
+            <input class="form-control" id="c_phone" placeholder="77001234567" />
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Сумма</label>
+            <input class="form-control" id="c_amount" type="number" min="0" step="1" value="100000"/>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Оплачено</label>
+            <input class="form-control" id="c_paid" type="number" min="0" step="1" placeholder="Если пусто — возьмём amount"/>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Списать</label>
+            <input class="form-control" id="c_redeem" type="number" min="0" step="1" value="0"/>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Метод оплаты</label>
+            <select class="form-select" id="c_method">
+              <option value="CASH" selected>Наличка</option>
+<option value="CARD">Карта</option>
+<option value="TRANSFER">Перевод</option>
+<option value="MIXED">Смешанная</option>
+<option value="OTHER">Другое</option>
+
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Комментарий</label>
+            <input class="form-control" id="c_comment" placeholder="Например: № чека"/>
+          </div>
+
+          <div class="col-12">
+            <div class="small text-muted mt-2">Если клиента нет — можно указать данные для автосоздания (опционально)</div>
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">ФИО (full_name)</label>
+            <input class="form-control" id="c_name" placeholder="Asym Test"/>
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Дата рождения (birth_date)</label>
+            <input class="form-control" id="c_birth" type="date"/>
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label">Уровень</label>
+            <select class="form-select" id="c_tier">
+              <option value="">Авто</option>
+              <option value="Bronze">Bronze</option>
+              <option value="Silver">Silver</option>
+              <option value="Gold">Gold</option>
+            </select>
+          </div>
+
+          <div class="col-12">
+            <div id="c_error" class="text-danger small d-none"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-success" type="button" id="c_submit">
+          <i class="bi bi-check2-circle me-1"></i> Провести
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function normalizePhoneLocal(v) {
+    const digits = String(v || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("8") && digits.length === 11) return "7" + digits.slice(1);
+    if (digits.startsWith("7") && digits.length === 11) return digits;
+    if (digits.length === 10) return "7" + digits;
+    return digits;
+  }
+
+  function fmtMoneyLocal(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return x.toLocaleString("ru-RU");
+  }
+
+  function safeInt(v, fallback=0) {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : fallback;
+  }
+
+  function fmtDateLocal(dt) {
+    try {
+      if (!dt) return "—";
+      return new Date(dt).toLocaleString("ru-RU");
+    } catch {
+      return "—";
+    }
+  }
+
+  async function apiGetJson(url) {
+    const r = await fetch(url, { headers: { "Accept": "application/json" } });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data?.detail || "Request failed");
+    return data;
+  }
+
+  async function apiPostJson(url, payload) {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data?.detail || "Request failed");
+    return data;
+  }
+
+  function renderTxRows(arr) {
+    const tbody = document.getElementById("txTbody");
+    const count = document.getElementById("txCount");
+
+    if (!Array.isArray(arr) || arr.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-muted">Транзакции не найдены.</td></tr>`;
+      count.textContent = "0";
+      return;
+    }
+
+    count.textContent = String(arr.length);
+
+    tbody.innerHTML = arr.map(t => {
+      const id = t.id ?? "—";
+      const created = fmtDateLocal(t.created_at ?? t.createdAt);
+      const phone = t.user_phone ?? "—";
+      const amount = fmtMoneyLocal(t.amount);
+      const paid = fmtMoneyLocal(t.paid_amount ?? t.paidAmount ?? t.amount);
+      const redeem = fmtMoneyLocal(t.redeem_points ?? t.redeemPoints ?? 0);
+      const earned = fmtMoneyLocal(t.earned_points ?? t.earnedPoints ?? 0);
+      const comment = (t.comment ?? "").toString();
+
+      return `
+        <tr>
+          <td>${id}</td>
+          <td class="text-muted">${created}</td>
+          <td>${phone}</td>
+          <td class="text-end">${amount}</td>
+          <td class="text-end">${paid}</td>
+          <td class="text-end">${redeem}</td>
+          <td class="text-end">${earned}</td>
+          <td class="text-muted">${comment}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/client/${phone}">
+              Карточка
+            </a>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function loadAll(limit=200) {
+    const data = await apiGetJson(`/api/transactions/?limit=${limit}&offset=0`);
+    renderTxRows(data);
+  }
+
+  async function loadByPhone(phone) {
+    const data = await apiGetJson(`/api/transactions/by-phone/${phone}`);
+    renderTxRows(data);
+  }
+
+  async function onSearch() {
+    const raw = document.getElementById("txPhone").value;
+    const phone = normalizePhoneLocal(raw);
+
+    try {
+      if (phone) {
+        await loadByPhone(phone);
+      } else {
+        await loadAll(200);
+      }
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+      document.getElementById("txTbody").innerHTML =
+        `<tr><td colspan="9" class="text-danger">Ошибка загрузки транзакций</td></tr>`;
+      document.getElementById("txCount").textContent = "—";
+    }
+  }
+
+  // ===== Create TX =====
+  const modalEl = document.getElementById("txCreateModal");
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+  function openCreate() {
+    document.getElementById("c_error").classList.add("d-none");
+    const p = normalizePhoneLocal(document.getElementById("txPhone").value);
+    if (p) document.getElementById("c_phone").value = p;
+    modal.show();
+  }
+
+  async function createTx() {
+    const err = document.getElementById("c_error");
+    err.classList.add("d-none");
+
+    const phone = normalizePhoneLocal(document.getElementById("c_phone").value);
+    const amount = safeInt(document.getElementById("c_amount").value, 0);
+    const paidRaw = document.getElementById("c_paid").value;
+    const paid_amount = paidRaw === "" ? null : safeInt(paidRaw, 0);
+    const redeem_points = safeInt(document.getElementById("c_redeem").value, 0);
+
+    const payment_method = document.getElementById("c_method").value || "CASH";
+    const comment = (document.getElementById("c_comment").value || "").trim();
+
+    const full_name = (document.getElementById("c_name").value || "").trim();
+    const birth_date = document.getElementById("c_birth").value || null;
+    const tier = document.getElementById("c_tier").value || null;
+
+    if (!phone) return uiToast("Введите телефон", "warning");
+    if (!amount || amount <= 0) return uiToast("Сумма должна быть > 0", "warning");
+    if (redeem_points < 0) return uiToast("Списать < 0 нельзя", "warning");
+
+    const payload = {
+      user_phone: phone,
+      amount,
+      paid_amount,
+      redeem_points,
+      payment_method,
+      comment,
+      full_name: full_name || null,
+      birth_date,
+      tier,
+    };
+
+    try {
+      await apiPostJson("/api/transactions/", payload);
+      uiToast("Транзакция проведена", "success");
+      modal.hide();
+
+      // обновить таблицу: если есть телефон — по телефону, иначе “все”
+      document.getElementById("txPhone").value = phone;
+      await loadByPhone(phone);
+    } catch (e) {
+      err.textContent = "Ошибка проведения: " + e.message;
+      err.classList.remove("d-none");
+      uiToast("Ошибка создания транзакции", "error");
+    }
+  }
+
+  // events
+  document.getElementById("txSearchBtn").addEventListener("click", onSearch);
+  document.getElementById("txPhone").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onSearch();
+  });
+
+  document.getElementById("txRefreshBtn").addEventListener("click", onSearch);
+  document.getElementById("txOpenCreateBtn").addEventListener("click", openCreate);
+  document.getElementById("c_submit").addEventListener("click", createTx);
+
+  // initial load: последние транзакции
+  loadAll(200);
+</script>
+{% endblock %}

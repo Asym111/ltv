@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% set current_page = "news" %}
+{% set page_title = "Новости" %}
+{% set page_subtitle = "Лента событий и быстрые действия" %}
+
+{% block topbar_actions %}
+<div class="topbar-pills">
+  <button class="pill-btn active" type="button" data-news-filter="all">
+    <i class="bi bi-lightning-charge"></i><span>Все</span>
+  </button>
+  <button class="pill-btn" type="button" data-news-filter="tx">
+    <i class="bi bi-receipt"></i><span>Транзакции</span>
+  </button>
+  <button class="pill-btn" type="button" data-news-filter="cp">
+    <i class="bi bi-megaphone"></i><span>Кампании</span>
+  </button>
+  <button class="pill-btn" type="button" data-news-filter="al">
+    <i class="bi bi-bell"></i><span>Алерты</span>
+  </button>
+
+  <button class="pill-btn ms-2" type="button" id="newsReloadBtn">
+    <i class="bi bi-arrow-repeat"></i><span>Обновить</span>
+  </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <div class="col-12 col-xl-8">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+          <div class="h6 mb-0">Лента</div>
+          <div class="text-muted small">Последние события по продажам, кампаниям и KPI.</div>
+        </div>
+        <div class="text-muted small">Обновлено: <span id="newsUpdatedAt">—</span></div>
+      </div>
+
+      <div class="dash-list mt-3" id="newsFeed">
+        <div class="text-muted small">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <div class="card p-3">
+      <div class="h6 mb-1">Быстрые действия</div>
+      <div class="text-muted small">Переходы в наиболее частые разделы.</div>
+
+      <div class="dash-list mt-3">
+        <a class="dash-item" href="/admin/transactions">
+          <i class="bi bi-receipt"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">Транзакции</div>
+            <div class="meta">поиск и проведение</div>
+          </div>
+          <i class="bi bi-chevron-right ms-auto"></i>
+        </a>
+
+        <a class="dash-item" href="/admin/campaigns">
+          <i class="bi bi-megaphone"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">Кампании</div>
+            <div class="meta">создание и список</div>
+          </div>
+          <i class="bi bi-chevron-right ms-auto"></i>
+        </a>
+
+        <a class="dash-item" href="/admin/analytics">
+          <i class="bi bi-bar-chart"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">Аналитика</div>
+            <div class="meta">окна 7/30/90 + сегменты</div>
+          </div>
+          <i class="bi bi-chevron-right ms-auto"></i>
+        </a>
+
+        <button class="dash-item text-start" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel">
+          <i class="bi bi-stars"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold">Спросить AI</div>
+            <div class="meta">следующий лучший шаг</div>
+          </div>
+          <i class="bi bi-chevron-right ms-auto"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "news";
+</script>
+{% endblock %}

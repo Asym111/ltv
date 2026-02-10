@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-outline-secondary" type="button" id="stReloadBtn">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+<button class="btn btn-sm btn-success" type="button" id="stSaveBtn">
+  <i class="bi bi-check2-circle me-1"></i> Сохранить
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-12 col-lg-8">
+    <div class="card p-3">
+      <div class="h6 mb-2">Правила бонусов</div>
+      <div class="text-muted small mb-3">Изменения применяются ко всем последующим транзакциям.</div>
+
+      <div class="row g-2">
+        <div class="col-12"><div class="fw-semibold">A) Начисление (Earn %)</div></div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label">Bronze, %</label>
+          <input class="form-control" id="earn_bronze_percent" type="number" min="0" max="100">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Silver, %</label>
+          <input class="form-control" id="earn_silver_percent" type="number" min="0" max="100">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Gold, %</label>
+          <input class="form-control" id="earn_gold_percent" type="number" min="0" max="100">
+        </div>
+
+        <hr class="my-3"/>
+
+        <div class="col-12"><div class="fw-semibold">B) Списание (Redeem)</div></div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Максимум списания, % (0–100)</label>
+          <input class="form-control" id="redeem_max_percent" type="number" min="0" max="100">
+        </div>
+
+        <hr class="my-3"/>
+
+        <div class="col-12"><div class="fw-semibold">C) Активация / Сгорание</div></div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Активация через дней</label>
+          <input class="form-control" id="activation_days" type="number" min="0" max="3650">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Сгорание через дней (от даты активации)</label>
+          <input class="form-control" id="burn_days" type="number" min="0" max="3650">
+        </div>
+
+        <hr class="my-3"/>
+
+        <div class="col-12"><div class="fw-semibold">E) День рождения</div></div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Бонус (поинты)</label>
+          <input class="form-control" id="birthday_bonus_amount" type="number" min="0">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Начислять за N дней (0–31)</label>
+          <input class="form-control" id="birthday_bonus_days_before" type="number" min="0" max="31">
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">TTL, дней</label>
+          <input class="form-control" id="birthday_bonus_ttl_days" type="number" min="0" max="3650">
+        </div>
+
+        <div class="col-12">
+          <div id="stMsg" class="small d-none mt-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "settings";
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% set current_page = "analytics" %}
+{% set page_title = "Аналитика" %}
+{% set page_subtitle = "Срезы 7/30/90 дней и сегменты + алерты (MVP)" %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-outline-secondary" id="anReloadBtn" type="button">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+
+<a class="btn btn-sm btn-outline-primary" href="/admin/campaigns">
+  <i class="bi bi-megaphone me-1"></i> Кампании
+</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+
+  <!-- Алерты -->
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">Алерты</div>
+          <div class="text-muted small">Быстрые действия по сегментам.</div>
+        </div>
+        <div id="anMsg" class="small text-muted"></div>
+      </div>
+
+      <div id="anAlertsBox" class="d-flex flex-column gap-2 mt-3">
+        <div class="text-muted">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сводка -->
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">Сводка</div>
+          <div class="text-muted small">Источник: транзакции (paid_amount) + user_phone. Срезы 7/30/90 дней.</div>
+        </div>
+        <div class="small text-muted"></div>
+      </div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>Период</th>
+              <th class="text-end">Выручка</th>
+              <th class="text-end">Транзакции</th>
+              <th class="text-end">Клиенты</th>
+              <th class="text-end">Средний чек</th>
+            </tr>
+          </thead>
+          <tbody id="anWindowsTbody">
+            <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сегменты -->
+  <div class="col-12 col-lg-6">
+    <div class="card p-3">
+      <div class="h6 mb-2">Сегменты</div>
+      <div class="text-muted small mb-2">Кликабельные сегменты. Дальше — кампании и алерты по RFM.</div>
+
+      <div id="anSegmentsBox" class="d-flex flex-column gap-2">
+        <div class="text-muted">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI обзор -->
+  <div class="col-12 col-lg-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">AI-обзор</div>
+          <div class="text-muted small">Инсайты и рекомендации (Gemini или fallback-эвристика).</div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+          <span id="aiModeBadge" class="badge text-bg-secondary">—</span>
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="aiReloadBtn">
+            <i class="bi bi-stars me-1"></i> Обновить AI
+          </button>
+        </div>
+      </div>
+
+      <div id="aiError" class="text-danger small d-none mt-2"></div>
+
+      <div class="mt-3">
+        <div class="text-muted small mb-1">Инсайты</div>
+        <ul id="aiInsights" class="mb-0">
+          <li class="text-muted">Загрузка…</li>
+        </ul>
+      </div>
+
+      <div class="mt-3">
+        <div class="text-muted small mb-1">Рекомендации</div>
+        <div id="aiRecos" class="d-flex flex-column gap-2">
+          <div class="text-muted small">Загрузка…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "analytics";
+</script>
+{% endblock %}

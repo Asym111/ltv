@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-outline-secondary" id="btnRefreshTop" type="button">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card card-soft">
+      <div class="card-header">Быстрый поиск</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <input id="searchPhone" class="form-control" placeholder="Телефон (например 77001234567)"/>
+            <div id="searchError" class="text-danger small mt-2 d-none"></div>
+          </div>
+          <div class="col-12 d-grid">
+            <button id="btnSearch" class="btn btn-success" type="button">
+              <i class="bi bi-search me-1"></i> Открыть карточку
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-soft mt-3">
+      <div class="card-header">Подсказка</div>
+      <div class="card-body text-muted small">
+        Эта страница будет расширена: дополнительные поля клиента, импорт/экспорт, сегменты, фильтры, массовые действия.
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card card-soft">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <div>Список клиентов</div>
+        <button id="btnRefresh" class="btn btn-sm btn-outline-secondary" type="button">
+          <i class="bi bi-arrow-repeat me-1"></i> Обновить
+        </button>
+      </div>
+
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width:70px;">ID</th>
+                <th>Телефон</th>
+                <th>Имя</th>
+                <th style="width:110px;">Уровень</th>
+                <th class="text-end" style="width:120px;">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr><td colspan="5" class="text-muted">Загрузка...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="usersError" class="text-danger small mt-2 d-none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // временно используем тот же JS, что и для списка клиентов
+  window.__ADMIN_PAGE__ = "clients";
+</script>
+{% endblock %}

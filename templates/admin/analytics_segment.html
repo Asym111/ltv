@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% set current_page = "analytics" %}
+
+{% block topbar_actions %}
+<a class="btn btn-sm btn-outline-secondary" href="/admin/analytics">
+  <i class="bi bi-arrow-left me-1"></i> Назад
+</a>
+
+<button class="btn btn-sm btn-outline-secondary" id="segReloadBtn" type="button">
+  <i class="bi bi-arrow-repeat me-1"></i> Обновить
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">{{ segment_title }}</div>
+          <div class="text-muted small">
+            Сегмент: <span class="badge text-bg-secondary">{{ segment_key }}</span>
+          </div>
+        </div>
+        <div id="segMsg" class="small text-muted"></div>
+      </div>
+
+      <!-- Фильтры -->
+      <div class="mt-3 border rounded p-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">R ≥</label>
+            <select id="segRMin" class="form-select form-select-sm">
+              <option value="">—</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">F ≥</label>
+            <select id="segFMin" class="form-select form-select-sm">
+              <option value="">—</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">M ≥</label>
+            <select id="segMMin" class="form-select form-select-sm">
+              <option value="">—</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label small text-muted mb-1">Поиск (телефон/имя)</label>
+            <input id="segQ" class="form-control form-control-sm" placeholder="Например: 7747 или Асым">
+          </div>
+
+          <div class="col-12 col-md-3">
+            <label class="form-label small text-muted mb-1">Сортировка</label>
+            <select id="segSort" class="form-select form-select-sm">
+              <option value="">Последняя покупка</option>
+              <option value="rfm_desc">RFM (по убыванию)</option>
+              <option value="spent_90d">Выручка 90д</option>
+              <option value="spent_total">Выручка всего</option>
+              <option value="recency_days">Давность (меньше лучше)</option>
+            </select>
+          </div>
+
+          <div class="col-12 d-flex gap-2 mt-2">
+            <button id="segApplyBtn" class="btn btn-sm btn-primary" type="button">
+              <i class="bi bi-funnel me-1"></i> Применить
+            </button>
+            <button id="segClearBtn" class="btn btn-sm btn-outline-secondary" type="button">
+              Сбросить
+            </button>
+            <div id="segApplied" class="small text-muted ms-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>Телефон</th>
+              <th>Имя</th>
+              <th>Тир</th>
+              <th class="text-end">Покупок (90д)</th>
+              <th class="text-end">Выручка (90д)</th>
+              <th>Последняя покупка</th>
+              <th class="text-end">Дней назад</th>
+              <th class="text-end">RFM</th>
+              <th class="text-end"></th>
+            </tr>
+          </thead>
+          <tbody id="segTbody">
+            <tr><td colspan="9" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="text-muted small mt-2">
+        Следующий шаг: алерты и “быстрые действия” (кампании).
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "analytics_segment";
+  window.__SEGMENT_KEY__ = "{{ segment_key }}";
+</script>
+{% endblock %}

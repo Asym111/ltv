@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card p-4">
+  <div class="d-flex align-items-center justify-content-between">
+    <div>
+      <div class="h5 mb-1">{{ page_title }}</div>
+      <div class="text-muted">{{ page_subtitle }}</div>
+    </div>
+    <span class="badge text-bg-secondary">in progress</span>
+  </div>
+
+  <hr class="my-3"/>
+
+  <div class="text-muted">
+    Эта страница подключена, чтобы меню не вело в 404.
+    Следующий шаг — реализовать полноценный модуль.
+  </div>
+</div>
+{% endblock %}

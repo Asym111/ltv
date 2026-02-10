@@ -1,0 +1,571 @@
+/* =========================
+   LTV Admin UI — Full app.css
+   Light (white content + dark sidebar like Sagi)
+   Dark  (keep your current dark feel)
+   ========================= */
+
+/* ---------- Base tokens (shared) ---------- */
+:root{
+  --radius: 16px;
+  --radius2: 12px;
+  --sidebar-w: 288px;
+
+  /* Brand accents */
+  --mint: #35c37d;
+  --mint2: #2bb673;
+  --gold: #d6b25e;
+  --gold2: #caa24a;
+}
+
+/* =========================================================
+   LIGHT THEME (DEFAULT)
+   White content + dark premium sidebar
+   ========================================================= */
+:root{
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+
+  --sidebar: #0b1220;
+  --sidebar2: #0f1a2f;
+  --sidebarText: rgba(255,255,255,.85);
+  --sidebarMuted: rgba(255,255,255,.55);
+
+  --stroke: rgba(15,23,42,.08);
+  --stroke2: rgba(15,23,42,.10);
+
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --shadow2: 0 6px 18px rgba(15, 23, 42, 0.08);
+
+  --bg-grad-1: rgba(53,195,125,.06);
+  --bg-grad-2: rgba(214,178,94,.04);
+
+  --input-bg: #ffffff;
+  --input-border: rgba(15,23,42,.14);
+  --input-focus: rgba(53,195,125,.22);
+}
+
+/* =========================================================
+   DARK THEME
+   ========================================================= */
+:root[data-theme="dark"]{
+  --bg: #050812;
+  --panel: #0b1324;
+  --text: #e8eefc;
+  --muted: rgba(232,238,252,.70);
+
+  --sidebar: #070d18;
+  --sidebar2: #0b1220;
+  --sidebarText: rgba(232,238,252,.85);
+  --sidebarMuted: rgba(232,238,252,.55);
+
+  --stroke: rgba(255,255,255,.10);
+  --stroke2: rgba(255,255,255,.14);
+
+  --shadow: 0 18px 45px rgba(0,0,0,.55);
+  --shadow2: 0 10px 30px rgba(0,0,0,.40);
+
+  --bg-grad-1: rgba(53,195,125,.14);
+  --bg-grad-2: rgba(214,178,94,.07);
+
+  --input-bg: rgba(255,255,255,.04);
+  --input-border: rgba(255,255,255,.14);
+  --input-focus: rgba(214,178,94,.18);
+}
+
+/* ---------- Global ---------- */
+html, body { height: 100%; }
+
+body{
+  margin: 0;
+  color: var(--text);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+
+  background:
+    radial-gradient(900px 520px at 25% 0%, var(--bg-grad-1), transparent 60%),
+    radial-gradient(820px 480px at 85% 10%, var(--bg-grad-2), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+}
+
+/* ---------- Shell ---------- */
+.app-shell{
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+/* =========================================================
+   Sidebar
+   ========================================================= */
+.app-sidebar{
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 18px 14px;
+
+  background:
+    radial-gradient(1200px 500px at 20% 0%, rgba(53,195,125,.22), transparent 60%),
+    linear-gradient(180deg, var(--sidebar) 0%, var(--sidebar2) 100%);
+
+  border-right: 1px solid rgba(255,255,255,.06);
+}
+
+.sidebar-brand{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.brand-badge{
+  width: 42px; height: 42px;
+  border-radius: 14px;
+  display: grid; place-items: center;
+
+  background: rgba(53,195,125,.20);
+  border: 1px solid rgba(53,195,125,.35);
+  color: #d9ffe9;
+  font-weight: 900;
+  letter-spacing: .3px;
+}
+
+.brand-name{
+  color: white;
+  font-weight: 900;
+  letter-spacing: .2px;
+  line-height: 1.1;
+}
+.brand-sub{
+  color: var(--sidebarMuted);
+  font-size: .85rem;
+}
+
+.sidebar-section{ margin-top: 16px; }
+.sidebar-section-title{
+  color: var(--sidebarMuted);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 8px 10px;
+}
+
+.nav-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--sidebarText);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease, color .15s ease;
+}
+.nav-item i{ font-size: 1.05rem; opacity: .9; }
+
+.nav-item:hover{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.10);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.nav-item.active{
+  background: rgba(53,195,125,.18);
+  border-color: rgba(53,195,125,.28);
+  color: #eafff3;
+}
+
+.sidebar-footer{
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+}
+
+.sidebar-user{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.user-avatar{
+  width: 36px; height: 36px;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.08);
+  color: white;
+  font-weight: 800;
+}
+
+.user-name{ color: white; font-weight: 800; line-height: 1.1; }
+.user-role{ color: var(--sidebarMuted); font-size: .85rem; }
+
+/* =========================================================
+   Main
+   ========================================================= */
+.app-main{
+  min-height: 100vh;
+  padding: 18px 20px 28px 20px;
+}
+
+.app-topbar{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 14px;
+
+  padding: 14px 16px;
+  border-radius: var(--radius);
+
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow2);
+}
+
+.page-title{
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+.page-subtitle{
+  color: var(--muted);
+  font-size: .95rem;
+  margin-top: 2px;
+}
+
+.app-content{ display: block; }
+
+/* =========================================================
+   Bootstrap Cards / Buttons — unify look
+   ========================================================= */
+.card{
+  background: var(--panel) !important;
+  border: 1px solid var(--stroke) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow2);
+}
+
+hr{
+  border-color: var(--stroke) !important;
+  opacity: 1;
+}
+
+.btn{
+  border-radius: 12px;
+}
+
+/* =========================================================
+   Pills in topbar (design-like)
+   ========================================================= */
+.topbar-pills{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.pill-btn{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: .9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pill-btn i{ font-size: 1rem; opacity: .9; }
+
+.pill-btn:hover{
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border-color: var(--stroke2);
+}
+
+.pill-btn.active{
+  color: var(--text);
+  background: color-mix(in srgb, var(--mint) 18%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 28%, transparent);
+}
+
+/* будет работать, когда JS добавит page-desktop на body */
+.page-desktop #aiPanelBtn{
+  display: none !important;
+}
+
+/* =========================================================
+   Dash components
+   ========================================================= */
+.fw-black{ font-weight: 900; }
+
+.dash-box{
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius2);
+  padding: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.dash-box-title{
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.dash-actions{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-action{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.dash-action:hover{
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.dash-action button,
+button.dash-action{
+  width: 100%;
+  text-align: left;
+}
+
+.dash-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+  background: rgba(99,102,241,.7);
+}
+.dash-dot.ok{ background: rgba(53,195,125,.85); }
+.dash-dot.warn{ background: rgba(245,158,11,.85); }
+
+.dash-stat-label{
+  color: var(--muted);
+  font-size: .85rem;
+  font-weight: 800;
+}
+.dash-stat-value{
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: .2px;
+  line-height: 1.1;
+  margin-top: 6px;
+}
+.dash-stat-sub{
+  color: var(--muted);
+  font-size: .85rem;
+  margin-top: 6px;
+}
+
+.dash-kpi-label{
+  color: var(--muted);
+  font-size: .85rem;
+  font-weight: 800;
+}
+.dash-kpi-value{
+  font-size: 1.35rem;
+  font-weight: 900;
+  margin-top: 6px;
+}
+
+.dash-spark{
+  height: 38px;
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background:
+    linear-gradient(180deg,
+      rgba(99,102,241,.18) 0%,
+      rgba(99,102,241,.06) 60%,
+      transparent 100%);
+}
+.dash-spark.mint{
+  background:
+    linear-gradient(180deg,
+      rgba(53,195,125,.18) 0%,
+      rgba(53,195,125,.06) 60%,
+      transparent 100%);
+}
+
+.dash-list{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dash-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.dash-item:hover{
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.dash-item .meta{
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.dash-scroll{
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+/* === NEW: Today metrics === */
+.dash-metrics{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dash-metric{
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.dash-metric .label{
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.dash-metric .value{
+  font-size: 1.25rem;
+  font-weight: 900;
+  margin-top: 6px;
+  line-height: 1.1;
+}
+
+/* small screens: stack */
+@media (max-width: 576px){
+  .dash-metrics{ grid-template-columns: 1fr; }
+}
+
+/* =========================================================
+   Buttons (Bootstrap-friendly)
+   ========================================================= */
+.btn-success{
+  background-color: var(--mint) !important;
+  border-color: color-mix(in srgb, var(--mint) 35%, transparent) !important;
+  font-weight: 800;
+}
+.btn-success:hover{
+  background-color: var(--mint2) !important;
+  border-color: color-mix(in srgb, var(--mint) 50%, transparent) !important;
+}
+
+.btn-outline-secondary{
+  border-color: var(--stroke2) !important;
+  color: color-mix(in srgb, var(--text) 85%, transparent) !important;
+}
+.btn-outline-secondary:hover{
+  background: color-mix(in srgb, var(--panel) 90%, transparent) !important;
+  border-color: var(--stroke2) !important;
+  color: var(--text) !important;
+}
+
+/* =========================================================
+   Forms
+   ========================================================= */
+.form-control{
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  color: var(--text) !important;
+  border-radius: 14px;
+}
+
+.form-control::placeholder{
+  color: color-mix(in srgb, var(--muted) 85%, transparent);
+}
+
+.form-control:focus{
+  background: var(--input-bg) !important;
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent) !important;
+  box-shadow: 0 0 0 .20rem var(--input-focus) !important;
+  color: var(--text) !important;
+}
+
+/* =========================================================
+   Tables
+   ========================================================= */
+.table{ color: var(--text) !important; }
+
+.table thead th{
+  color: var(--muted) !important;
+  font-weight: 800;
+  border-bottom: 1px solid var(--stroke2) !important;
+}
+
+.table td, .table th{
+  vertical-align: middle;
+  border-color: var(--stroke) !important;
+}
+
+.table tbody tr:hover{
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+/* =========================================================
+   Toast / Alerts
+   ========================================================= */
+.toast, .alert{
+  border-radius: var(--radius2);
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow2);
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media (max-width: 992px){
+  .app-shell{ grid-template-columns: 1fr; }
+  .app-sidebar{ position: relative; height: auto; }
+  .sidebar-footer{
+    position: relative;
+    left: 0; right: 0; bottom: 0;
+    margin-top: 12px;
+  }
+  .app-topbar{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}

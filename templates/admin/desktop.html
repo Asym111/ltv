@@ -1,0 +1,312 @@
+{# templates/admin/desktop.html #}
+{% extends "base.html" %}
+
+{% set current_page = "desktop" %}
+{% set page_title = "Рабочий стол" %}
+{% set page_subtitle = "Главная панель управления" %}
+
+{% block topbar_actions %}
+<div class="topbar-pills">
+  <button class="pill-btn active" type="button"
+          data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel">
+    <i class="bi bi-stars"></i>
+    <span>AI Ассистент</span>
+  </button>
+
+  <a class="pill-btn" href="/admin/news">
+    <i class="bi bi-megaphone"></i>
+    <span>Новости</span>
+  </a>
+
+  <a class="pill-btn" href="/admin/analytics">
+    <i class="bi bi-bar-chart"></i>
+    <span>Аналитика</span>
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- LEFT: stacked (prevents empty gaps) -->
+  <div class="col-12 col-xl-7">
+    <div class="d-flex flex-column gap-3">
+
+      <!-- Welcome -->
+      <div class="card p-3">
+        <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+          <div>
+            <div class="text-muted small">Приветствие</div>
+            <div class="h4 fw-black mb-1">Добрый день!</div>
+            <div class="text-muted">Короткий обзор по базе и быстрые действия на сегодня.</div>
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/clients">
+              <i class="bi bi-people me-1"></i> Клиенты
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/transactions">
+              <i class="bi bi-receipt me-1"></i> Транзакции
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/campaigns">
+              <i class="bi bi-megaphone me-1"></i> Кампании
+            </a>
+          </div>
+        </div>
+
+        <hr class="my-3"/>
+
+        <div class="row g-2">
+          <div class="col-12 col-lg-6">
+            <div class="dash-box">
+              <div class="dash-box-title">Ключевые задачи</div>
+              <div class="dash-actions">
+                <a class="dash-action" href="/admin/analytics/segment/vip">
+                  <span class="dash-dot"></span>
+                  <span>Проверить VIP сегмент</span>
+                  <i class="bi bi-chevron-right ms-auto"></i>
+                </a>
+                <a class="dash-action" href="/admin/analytics/segment/risk">
+                  <span class="dash-dot warn"></span>
+                  <span>Клиенты в зоне риска</span>
+                  <i class="bi bi-chevron-right ms-auto"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12 col-lg-6">
+            <div class="dash-box">
+              <div class="dash-box-title">Быстрый обзор</div>
+              <div class="dash-actions">
+                <button class="dash-action" type="button"
+                        data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel">
+                  <span class="dash-dot ok"></span>
+                  <span>Спросить AI: “Что делать сегодня?”</span>
+                  <i class="bi bi-chevron-right ms-auto"></i>
+                </button>
+                <a class="dash-action" href="/admin/analytics">
+                  <span class="dash-dot"></span>
+                  <span>Открыть аналитику 7/30/90</span>
+                  <i class="bi bi-chevron-right ms-auto"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="text-muted small mt-2">
+              Обновление данных: <span id="dashUpdatedAt">—</span>
+              <button class="btn btn-sm btn-outline-secondary ms-2" type="button" id="dashReloadBtn">
+                <i class="bi bi-arrow-repeat me-1"></i> Обновить
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today + Recent -->
+      <div class="card p-3">
+        <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+          <div>
+            <div class="h6 mb-0">Сегодня</div>
+            <div class="text-muted small">Оперативные показатели за текущий день.</div>
+          </div>
+          <a class="btn btn-sm btn-outline-secondary" href="/admin/transactions">
+            Открыть транзакции <i class="bi bi-chevron-right ms-1"></i>
+          </a>
+        </div>
+
+        <div class="dash-metrics mt-3">
+          <div class="dash-metric">
+            <div class="label">Выручка</div>
+            <div class="value" id="dashTodayRevenue">—</div>
+          </div>
+          <div class="dash-metric">
+            <div class="label">Транзакции</div>
+            <div class="value" id="dashTodayTx">—</div>
+          </div>
+          <div class="dash-metric">
+            <div class="label">Средний чек</div>
+            <div class="value" id="dashTodayAvg">—</div>
+          </div>
+        </div>
+
+        <hr class="my-3"/>
+
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="text-muted small">Последние транзакции</div>
+          <a class="small text-decoration-none" href="/admin/transactions">
+            Смотреть все <i class="bi bi-arrow-right"></i>
+          </a>
+        </div>
+
+        <div class="dash-list mt-2" id="dashRecentTxList">
+          <div class="text-muted small">Загрузка…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- RIGHT: Mini stats + campaigns -->
+  <div class="col-12 col-xl-5">
+    <div class="row g-3">
+      <div class="col-12 col-md-6 col-xl-12">
+        <div class="card p-3 dash-stat">
+          <div class="dash-stat-label">Новые клиенты</div>
+          <div class="dash-stat-value" id="dashNewClients">—</div>
+          <div class="dash-stat-sub">сегмент “Новые”</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6 col-xl-12">
+        <div class="card p-3 dash-stat">
+          <div class="dash-stat-label">Активные кампании</div>
+          <div class="dash-stat-value" id="dashActiveCampaigns">—</div>
+          <div class="dash-stat-sub">draft/ready</div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <div class="card p-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="h6 mb-0">Активные кампании</div>
+              <div class="text-muted small">Быстрый доступ к последним.</div>
+            </div>
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/campaigns">
+              Открыть <i class="bi bi-chevron-right ms-1"></i>
+            </a>
+          </div>
+
+          <div class="dash-list mt-3" id="dashCampaignList">
+            <div class="text-muted small">Загрузка…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="col-12">
+    <div class="row g-3">
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card p-3 dash-kpi">
+          <div class="dash-kpi-label">Выручка 7 дней</div>
+          <div class="dash-kpi-value" id="dashKpiRevenue7">—</div>
+          <div class="dash-spark"></div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card p-3 dash-kpi">
+          <div class="dash-kpi-label">Выручка 30 дней</div>
+          <div class="dash-kpi-value" id="dashKpiRevenue30">—</div>
+          <div class="dash-spark mint"></div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card p-3 dash-kpi">
+          <div class="dash-kpi-label">Транзакции 30 дней</div>
+          <div class="dash-kpi-value" id="dashKpiTx30">—</div>
+          <div class="dash-spark"></div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card p-3 dash-kpi">
+          <div class="dash-kpi-label">Средний чек 30 дней</div>
+          <div class="dash-kpi-value" id="dashKpiAvg30">—</div>
+          <div class="dash-spark mint"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom row: AI + Feed -->
+  <div class="col-12 col-xl-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">AI — Owner Overview</div>
+          <div class="text-muted small">Инсайты по базе и следующий шаг.</div>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center">
+          <span id="aiModeBadge" class="badge text-bg-secondary">—</span>
+          <button id="aiReloadBtn" class="btn btn-sm btn-outline-secondary" type="button">
+            <i class="bi bi-stars me-1"></i> Обновить
+          </button>
+        </div>
+      </div>
+
+      <div id="aiError" class="text-danger small d-none mt-2"></div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-12 col-lg-6">
+          <div class="text-muted small mb-2">Инсайты</div>
+          <ul id="aiInsights" class="mb-0 small dash-scroll">
+            <li class="text-muted">Загрузка…</li>
+          </ul>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="text-muted small mb-2">Рекомендации</div>
+          <div id="aiRecos" class="d-flex flex-column gap-2 dash-scroll">
+            <div class="text-muted small">Загрузка…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-primary" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel">
+          <i class="bi bi-stars me-1"></i> Открыть AI-панель
+        </button>
+        <a class="btn btn-sm btn-outline-secondary" href="/admin/analytics">
+          <i class="bi bi-bar-chart me-1"></i> В аналитику
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">Лента</div>
+          <div class="text-muted small">Алерты и быстрые сегменты.</div>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="/admin/news">
+          Открыть <i class="bi bi-chevron-right ms-1"></i>
+        </a>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-12 col-lg-6">
+          <div class="text-muted small mb-2">Алерты</div>
+          <div class="dash-list" id="dashAlertsList">
+            <div class="text-muted small">Загрузка…</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+          <div class="text-muted small mb-2">Сегменты</div>
+          <div class="dash-list" id="dashSegmentsList">
+            <div class="text-muted small">Загрузка…</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "desktop";
+</script>
+{% endblock %}

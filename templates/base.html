@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>
+    {% if page_title %}{{ page_title }} — LTV Admin{% else %}LTV Admin{% endif %}
+  </title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- ✅ Cache-busting -->
+  {% set _v = static_v|default('1') %}
+  <link href="/static/css/app.css?v={{ _v }}" rel="stylesheet"/>
+</head>
+
+<body class="page-{{ current_page|default('') }}">
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-badge">L</div>
+        <div class="brand-text">
+          <div class="brand-name">LTV</div>
+          <div class="brand-sub">Loyalty Platform</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Меню</div>
+
+        <a class="nav-item {% if current_page=='desktop' %}active{% endif %}" href="/admin">
+          <i class="bi bi-grid-1x2"></i>
+          <span>Рабочий стол</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='news' %}active{% endif %}" href="/admin/news">
+          <i class="bi bi-megaphone"></i>
+          <span>Новости</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='transactions' %}active{% endif %}" href="/admin/transactions">
+          <i class="bi bi-receipt"></i>
+          <span>Транзакции</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='whatsapp' %}active{% endif %}" href="/admin/whatsapp">
+          <i class="bi bi-whatsapp"></i>
+          <span>WhatsApp</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='analytics' %}active{% endif %}" href="/admin/analytics">
+          <i class="bi bi-bar-chart"></i>
+          <span>Аналитика</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='clients' %}active{% endif %}" href="/admin/clients">
+          <i class="bi bi-people"></i>
+          <span>Клиенты</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='settings' %}active{% endif %}" href="/admin/settings">
+          <i class="bi bi-sliders"></i>
+          <span>Настройки</span>
+        </a>
+
+        <a class="nav-item {% if current_page=='clients_db' %}active{% endif %}" href="/admin/clients-db">
+          <i class="bi bi-database"></i>
+          <span>База клиентов</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="user-avatar">A</div>
+          <div class="user-meta">
+            <div class="user-name">Admin</div>
+            <div class="user-role">Owner</div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-light w-100 mt-2" type="button"
+                onclick="uiToast('Пока без авторизации', 'info')">
+          <i class="bi bi-box-arrow-right me-1"></i> Выйти
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="app-main">
+      <div class="app-topbar">
+        <div class="topbar-left">
+          <div class="page-title">{{ page_title if page_title else "Dashboard" }}</div>
+          <div class="page-subtitle">{{ page_subtitle if page_subtitle else "" }}</div>
+        </div>
+
+        <div class="topbar-right d-flex align-items-center gap-2 flex-wrap">
+          {% block topbar_actions %}{% endblock %}
+
+          <button class="btn btn-outline-primary btn-sm" type="button" id="aiPanelBtn"
+                  data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel"
+                  title="AI помощник">
+            <i class="bi bi-stars me-1"></i> AI
+          </button>
+
+          <button id="themeToggle" class="btn btn-outline-secondary btn-sm" type="button" title="Сменить тему">
+            <span id="themeIcon">🌙</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="app-content">
+        {% block content %}{% endblock %}
+      </div>
+
+      <!-- Toast container -->
+      <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+        <div id="uiToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body" id="uiToastBody">...</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ Global AI Panel -->
+      <div class="offcanvas offcanvas-end" tabindex="-1" id="aiPanel" aria-labelledby="aiPanelLabel">
+        <div class="offcanvas-header">
+          <div>
+            <div class="fw-bold" id="aiPanelLabel">AI помощник</div>
+            <div class="text-muted small" id="aiPanelContext">Контекст: —</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+
+        <div class="offcanvas-body">
+          <label class="form-label small text-muted mb-1">Вопрос</label>
+          <textarea id="aiPanelQuestion" class="form-control" rows="4" placeholder="Например: что делать сегодня, чтобы увеличить повторные покупки?"></textarea>
+
+          <div class="d-flex align-items-center gap-2 mt-2">
+            <button class="btn btn-sm btn-primary" type="button" id="aiPanelSendBtn">
+              <i class="bi bi-send me-1"></i> Спросить
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="aiPanelClearBtn">Очистить</button>
+            <span id="aiPanelMode" class="badge text-bg-secondary ms-auto">—</span>
+          </div>
+
+          <div id="aiPanelError" class="text-danger small d-none mt-2"></div>
+
+          <div class="mt-3">
+            <div class="fw-semibold">Ответ</div>
+            <div id="aiPanelAnswer" class="mt-1 text-body">—</div>
+          </div>
+
+          <div class="mt-3">
+            <div class="text-muted small mb-1">Инсайты</div>
+            <ul id="aiPanelInsights" class="mb-0">
+              <li class="text-muted">—</li>
+            </ul>
+          </div>
+
+          <div class="mt-3">
+            <div class="text-muted small mb-1">Рекомендации</div>
+            <div id="aiPanelRecos" class="d-flex flex-column gap-2">
+              <div class="text-muted small">—</div>
+            </div>
+          </div>
+
+          <div class="text-muted small mt-3">
+            Подсказка: на карточке клиента AI автоматически работает в контексте клиента (телефон подтянется).
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- ✅ Cache-busting -->
+  <script src="/static/js/admin.js?v={{ _v }}"></script>
+
+  <script>
+    function uiToast(message, kind="success") {
+      const toastEl = document.getElementById("uiToast");
+      const bodyEl = document.getElementById("uiToastBody");
+      if (!toastEl || !bodyEl) return;
+
+      bodyEl.textContent = message;
+
+      toastEl.classList.remove("text-bg-success","text-bg-danger","text-bg-warning","text-bg-info","text-bg-dark");
+      if (kind === "success") toastEl.classList.add("text-bg-success");
+      else if (kind === "error") toastEl.classList.add("text-bg-danger");
+      else if (kind === "warning") toastEl.classList.add("text-bg-warning");
+      else if (kind === "info") toastEl.classList.add("text-bg-info");
+      else toastEl.classList.add("text-bg-dark");
+
+      const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 });
+      t.show();
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

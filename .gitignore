@@ -1,4 +1,16 @@
-# env files
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/ 
+*.log
+
+# DB / local artifacts
+*.db
+*.sqlite*
+*.bak
+
+# env
 .env
 .env.*
 !.env.example

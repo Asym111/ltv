@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% set current_page = "campaigns" %}
+{% set page_title = "Кампании" %}
+{% set page_subtitle = "Создать кампанию по сегменту и собрать список клиентов" %}
+
+{% block topbar_actions %}
+<a class="btn btn-sm btn-outline-secondary" href="/admin/analytics">
+  <i class="bi bi-arrow-left me-1"></i> Аналитика
+</a>
+
+<button class="btn btn-sm btn-success" type="button" id="cpOpenCreateBtn">
+  <i class="bi bi-plus-circle me-1"></i> Создать кампанию
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+
+  <div class="col-12">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <div>
+          <div class="h6 mb-0">Список кампаний</div>
+          <div class="text-muted small">Draft → Build → Ready (пока без рассылок).</div>
+        </div>
+        <div id="cpMsg" class="small text-muted"></div>
+      </div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>ID</th>
+              <th>Название</th>
+              <th>Сегмент</th>
+              <th class="text-end">Бонус</th>
+              <th>Статус</th>
+              <th class="text-end">Клиентов</th>
+              <th class="text-muted">Создано</th>
+              <th class="text-end"></th>
+            </tr>
+          </thead>
+          <tbody id="cpTbody">
+            <tr><td colspan="8" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Create (простая панель) -->
+  <div class="col-12">
+    <div id="cpCreateBox" class="card p-3 d-none">
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="h6 mb-0">Новая кампания</div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="cpCloseCreateBtn">Закрыть</button>
+      </div>
+
+      <div id="cpCreateErr" class="text-danger small d-none mt-2"></div>
+
+      <div class="row g-2 mt-2">
+        <div class="col-12 col-md-4">
+          <label class="form-label small text-muted mb-1">Название</label>
+          <input id="cpName" class="form-control form-control-sm" placeholder="Например: Реактивация спящих 30–90" />
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label small text-muted mb-1">Сегмент</label>
+          <select id="cpSegment" class="form-select form-select-sm">
+            <option value="new">Новые</option>
+            <option value="active">Активные</option>
+            <option value="sleeping">Спящие</option>
+            <option value="risk">В зоне риска</option>
+            <option value="lost">Потерянные</option>
+            <option value="vip">VIP</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1">
+          <label class="form-label small text-muted mb-1">R ≥</label>
+          <select id="cpR" class="form-select form-select-sm">
+            <option value="">—</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1">
+          <label class="form-label small text-muted mb-1">F ≥</label>
+          <select id="cpF" class="form-select form-select-sm">
+            <option value="">—</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1">
+          <label class="form-label small text-muted mb-1">M ≥</label>
+          <select id="cpM" class="form-select form-select-sm">
+            <option value="">—</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small text-muted mb-1">Бонус (KZT/баллы)</label>
+          <input id="cpBonus" type="number" class="form-control form-control-sm" value="0" min="0" />
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label small text-muted mb-1">Поиск (телефон/имя, опционально)</label>
+          <input id="cpQ" class="form-control form-control-sm" placeholder="Например: 7747 или Айым" />
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label small text-muted mb-1">Сортировка</label>
+          <select id="cpSort" class="form-select form-select-sm">
+            <option value="">Последняя покупка</option>
+            <option value="rfm_desc">RFM (по убыванию)</option>
+            <option value="spent_90d">Выручка 90д</option>
+            <option value="spent_total">Выручка всего</option>
+            <option value="recency_days">Давность</option>
+          </select>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label small text-muted mb-1">Заметка</label>
+          <input id="cpNote" class="form-control form-control-sm" placeholder="Опционально" />
+        </div>
+
+        <div class="col-12 d-flex gap-2 mt-2">
+          <button id="cpCreateBtn" class="btn btn-sm btn-success" type="button">
+            <i class="bi bi-check2 me-1"></i> Создать
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "campaigns";
+</script>
+{% endblock %}
