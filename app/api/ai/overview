@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "clients": 1284,
+    "active_30d": 412,
+    "churn_risk": 96
+  },
+  "insights": [
+    "22% клиентов приносят 81% выручки",
+    "Средний чек Silver упал на 8%"
+  ],
+  "recommendations": [
+    {
+      "action": "bonus_campaign",
+      "target": "inactive_30d",
+      "suggested_bonus": 5000,
+      "expected_effect": "+14% repeat rate"
+    }
+  ]
+}

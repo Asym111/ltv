@@ -1,0 +1,12 @@
+fastapi==0.128.0
+uvicorn[standard]==0.30.6
+
+SQLAlchemy==2.0.34
+pydantic==2.12.5
+pydantic-settings==2.5.2
+
+jinja2==3.1.4
+python-multipart==0.0.9
+
+alembic==1.13.2
+httpx>=0.27.0
