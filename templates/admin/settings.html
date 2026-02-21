@@ -1,79 +1,494 @@
 {% extends "base.html" %}
 
 {% block topbar_actions %}
-<button class="btn btn-sm btn-outline-secondary" type="button" id="stReloadBtn">
-  <i class="bi bi-arrow-repeat me-1"></i> Обновить
-</button>
-<button class="btn btn-sm btn-success" type="button" id="stSaveBtn">
-  <i class="bi bi-check2-circle me-1"></i> Сохранить
-</button>
+<div class="d-flex gap-2 align-items-center">
+  <span id="stSaveStatus" class="small text-muted d-none"></span>
+  <button class="btn btn-sm btn-outline-secondary" type="button" id="stReloadBtn">
+    <i class="bi bi-arrow-repeat me-1"></i> Обновить
+  </button>
+  <button class="btn btn-sm btn-success" type="button" id="stSaveBtn">
+    <i class="bi bi-check2-circle me-1"></i> Сохранить
+  </button>
+</div>
 {% endblock %}
 
 {% block content %}
-<div class="row g-3">
-  <div class="col-12 col-lg-8">
-    <div class="card p-3">
-      <div class="h6 mb-2">Правила бонусов</div>
-      <div class="text-muted small mb-3">Изменения применяются ко всем последующим транзакциям.</div>
+<div class="settings-layout">
 
-      <div class="row g-2">
-        <div class="col-12"><div class="fw-semibold">A) Начисление (Earn %)</div></div>
+  <!-- LEFT NAV -->
+  <nav class="settings-nav">
+    <a class="settings-nav-item active" data-tab="bonus" href="#">
+      <i class="bi bi-gift"></i>
+      <span>Бонусы</span>
+    </a>
+    <a class="settings-nav-item" data-tab="tiers" href="#">
+      <i class="bi bi-bar-chart-steps"></i>
+      <span>Уровни</span>
+    </a>
+    <a class="settings-nav-item" data-tab="redeem" href="#">
+      <i class="bi bi-wallet2"></i>
+      <span>Списание</span>
+    </a>
+    <a class="settings-nav-item" data-tab="activation" href="#">
+      <i class="bi bi-clock-history"></i>
+      <span>Активация</span>
+    </a>
+    <a class="settings-nav-item" data-tab="birthday" href="#">
+      <i class="bi bi-balloon-heart"></i>
+      <span>День рождения</span>
+    </a>
+    <a class="settings-nav-item" data-tab="boost" href="#">
+      <i class="bi bi-lightning-charge"></i>
+      <span>Повышенный бонус</span>
+    </a>
+    <a class="settings-nav-item" data-tab="roi" href="#">
+      <i class="bi bi-graph-up-arrow"></i>
+      <span>ROI / Экономика</span>
+    </a>
+  </nav>
 
-        <div class="col-12 col-md-4">
-          <label class="form-label">Bronze, %</label>
-          <input class="form-control" id="earn_bronze_percent" type="number" min="0" max="100">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Silver, %</label>
-          <input class="form-control" id="earn_silver_percent" type="number" min="0" max="100">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Gold, %</label>
-          <input class="form-control" id="earn_gold_percent" type="number" min="0" max="100">
-        </div>
+  <!-- RIGHT CONTENT -->
+  <div class="settings-content">
 
-        <hr class="my-3"/>
-
-        <div class="col-12"><div class="fw-semibold">B) Списание (Redeem)</div></div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Максимум списания, % (0–100)</label>
-          <input class="form-control" id="redeem_max_percent" type="number" min="0" max="100">
+    <!-- ── Бонусы ── -->
+    <div class="settings-tab active" id="tab-bonus">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">Бонусы</div>
+          <div class="settings-tab-sub">Базовые правила начисления баллов клиентам</div>
         </div>
+      </div>
 
-        <hr class="my-3"/>
-
-        <div class="col-12"><div class="fw-semibold">C) Активация / Сгорание</div></div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Активация через дней</label>
-          <input class="form-control" id="activation_days" type="number" min="0" max="3650">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Сгорание через дней (от даты активации)</label>
-          <input class="form-control" id="burn_days" type="number" min="0" max="3650">
-        </div>
-
-        <hr class="my-3"/>
-
-        <div class="col-12"><div class="fw-semibold">E) День рождения</div></div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Бонус (поинты)</label>
-          <input class="form-control" id="birthday_bonus_amount" type="number" min="0">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">Начислять за N дней (0–31)</label>
-          <input class="form-control" id="birthday_bonus_days_before" type="number" min="0" max="31">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label">TTL, дней</label>
-          <input class="form-control" id="birthday_bonus_ttl_days" type="number" min="0" max="3650">
+      <div class="settings-form">
+        <div class="settings-field">
+          <label class="settings-label">Название бонусов</label>
+          <div class="settings-hint">Как называются баллы в вашем бизнесе</div>
+          <input id="bonus_name" type="text" class="settings-input" placeholder="например: баллы, монеты, кредиты" maxlength="40">
         </div>
 
-        <div class="col-12">
-          <div id="stMsg" class="small d-none mt-2"></div>
+        <div class="settings-divider"></div>
+
+        <div class="settings-field-row">
+          <div class="settings-field">
+            <label class="settings-label">Bronze — начисление, %</label>
+            <div class="settings-hint">Базовый уровень</div>
+            <div class="settings-input-with-unit">
+              <input id="earn_bronze_percent" type="number" class="settings-input" min="0" max="100" placeholder="3">
+              <span class="settings-unit">% от суммы</span>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Silver — начисление, %</label>
+            <div class="settings-hint">Средний уровень</div>
+            <div class="settings-input-with-unit">
+              <input id="earn_silver_percent" type="number" class="settings-input" min="0" max="100" placeholder="5">
+              <span class="settings-unit">% от суммы</span>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Gold — начисление, %</label>
+            <div class="settings-hint">Высший уровень</div>
+            <div class="settings-input-with-unit">
+              <input id="earn_gold_percent" type="number" class="settings-input" min="0" max="100" placeholder="7">
+              <span class="settings-unit">% от суммы</span>
+            </div>
+          </div>
         </div>
 
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Приветственный бонус</label>
+          <div class="settings-hint">Начисляется за первую покупку клиента (0 = выключено)</div>
+          <div class="settings-input-with-unit" style="max-width:220px">
+            <input id="welcome_bonus_percent" type="number" class="settings-input" min="0" max="100" placeholder="0">
+            <span class="settings-unit">% от суммы</span>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- ── Уровни (тиры) ── -->
+    <div class="settings-tab" id="tab-tiers">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">Уровни клиентов</div>
+          <div class="settings-tab-sub">Настройте пороги накоплений и бонус для каждого уровня</div>
+        </div>
+        <button class="btn btn-sm btn-success" type="button" id="stAddTierBtn">
+          <i class="bi bi-plus-circle me-1"></i> Добавить уровень
+        </button>
+      </div>
+
+      <!-- Форма нового тира -->
+      <div class="settings-form mb-3" id="stNewTierForm" style="display:none;">
+        <div class="settings-field-row">
+          <div class="settings-field">
+            <label class="settings-label">Название уровня</label>
+            <input id="newTierName" type="text" class="settings-input" placeholder="например: Gold" maxlength="40">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Сумма накоплений от (₸)</label>
+            <input id="newTierSpend" type="number" class="settings-input" min="0" placeholder="1000000">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Бонус, %</label>
+            <div class="settings-input-with-unit">
+              <input id="newTierPercent" type="number" class="settings-input" min="0" max="100" placeholder="7">
+              <span class="settings-unit">%</span>
+            </div>
+          </div>
+          <div class="settings-field d-flex align-items-end gap-2">
+            <button class="btn btn-sm btn-success" type="button" id="stConfirmTierBtn">
+              <i class="bi bi-check2 me-1"></i> Добавить
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="stCancelTierBtn">Отмена</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-form">
+        <div class="tiers-table-wrap">
+          <table class="tiers-table">
+            <thead>
+              <tr>
+                <th>№</th>
+                <th>Название уровня</th>
+                <th>Бонус, %</th>
+                <th>Сумма накоплений от</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="stTiersTbody">
+              <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="settings-hint mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Уровни сортируются по сумме накоплений. Bronze — базовый уровень (задаётся в разделе «Бонусы»).
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Списание ── -->
+    <div class="settings-tab" id="tab-redeem">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">Списание</div>
+          <div class="settings-tab-sub">Правила использования бонусов клиентами</div>
+        </div>
+      </div>
+
+      <div class="settings-form">
+        <div class="settings-field">
+          <label class="settings-label">Максимум списания</label>
+          <div class="settings-hint">Какой % от суммы чека можно оплатить бонусами</div>
+          <div class="settings-select-wrap" style="max-width:300px">
+            <select id="redeem_max_percent" class="settings-select">
+              <option value="10">10% от суммы чека</option>
+              <option value="20">20% от суммы чека</option>
+              <option value="30">30% от суммы чека</option>
+              <option value="40">40% от суммы чека</option>
+              <option value="50">50% от суммы чека</option>
+              <option value="70">70% от суммы чека</option>
+              <option value="100">100% от суммы чека</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Активация ── -->
+    <div class="settings-tab" id="tab-activation">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">Сгорание и Активация</div>
+          <div class="settings-tab-sub">Когда бонусы становятся доступны и когда сгорают</div>
+        </div>
+      </div>
+
+      <div class="settings-form">
+        <div class="settings-field">
+          <label class="settings-label">Активация бонусов</label>
+          <div class="settings-hint">Через сколько дней после покупки бонусы становятся доступны</div>
+          <div class="d-flex align-items-center gap-3 mt-2">
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="activationImmediate" class="settings-checkbox">
+              <span>Активируется сразу</span>
+            </label>
+          </div>
+          <div class="settings-select-wrap mt-2" style="max-width:200px" id="activationDaysWrap">
+            <select id="activation_days" class="settings-select">
+              <option value="1">1 день</option>
+              <option value="2">2 дня</option>
+              <option value="3">3 дня</option>
+              <option value="7">7 дней</option>
+              <option value="14">14 дней</option>
+              <option value="30">30 дней</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field-row">
+          <div class="settings-field">
+            <label class="settings-label">Сгорание</label>
+            <div class="settings-hint">Какой % бонусов сгорает по истечении срока</div>
+            <div class="settings-select-wrap" style="max-width:200px">
+              <select id="burn_percent" class="settings-select">
+                <option value="100">100% — все</option>
+                <option value="50">50% — половина</option>
+                <option value="0">0% — не сгорают</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Период сгорания</label>
+            <div class="settings-hint">Через сколько дней после активации</div>
+            <div class="settings-select-wrap" style="max-width:200px">
+              <select id="burn_days" class="settings-select">
+                <option value="30">1 месяц</option>
+                <option value="60">2 месяца</option>
+                <option value="90">Три месяца</option>
+                <option value="180">Полгода</option>
+                <option value="365">Год</option>
+                <option value="730">2 года</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── День рождения ── -->
+    <div class="settings-tab" id="tab-birthday">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">День рождения</div>
+          <div class="settings-tab-sub">Поздравляйте клиентов-именинников с подарочными бонусами</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <label class="settings-toggle-label">
+            <input type="checkbox" id="birthday_enabled" class="settings-toggle-input">
+            <span class="settings-toggle-track"></span>
+            <span class="settings-toggle-text">Активно</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-form" id="birthdayFormContent">
+        <div class="settings-field-row">
+          <div class="settings-field">
+            <label class="settings-label">Кол-во начисляемых бонусов</label>
+            <input id="birthday_bonus_amount" type="number" class="settings-input" min="0" placeholder="5000">
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Срок действия</label>
+            <div class="settings-select-wrap">
+              <select id="birthday_bonus_ttl_days" class="settings-select">
+                <option value="7">Неделя</option>
+                <option value="14">2 недели</option>
+                <option value="30">Месяц</option>
+                <option value="60">2 месяца</option>
+                <option value="90">3 месяца</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Начислять за N дней</label>
+            <div class="settings-select-wrap">
+              <select id="birthday_bonus_days_before" class="settings-select">
+                <option value="0">В день рождения</option>
+                <option value="1">За 1 день</option>
+                <option value="3">За 3 дня</option>
+                <option value="7">За 7 дней</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Текст открытки</label>
+          <div class="settings-hint">Сообщение клиенту в день рождения</div>
+          <textarea id="birthday_message" class="settings-textarea" rows="4"
+            placeholder="Мы, команда [Название] поздравляем Вас с днём рождения! Желаем всех благ…"></textarea>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label">Текст за 7 дней</label>
+          <div class="settings-hint">Предварительное уведомление (опционально)</div>
+          <textarea id="birthday_message_7d" class="settings-textarea" rows="3"
+            placeholder="Через 7 дней у Вас день рождения! Для Вас уже готовится подарок…"></textarea>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Уведомление о бонусах</label>
+          <div class="d-flex flex-column gap-2 mt-2">
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="birthday_notify_7d" class="settings-checkbox">
+              <span>Уведомлять за 7 дней</span>
+            </label>
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="birthday_notify_3d" class="settings-checkbox">
+              <span>Уведомлять за 3 дня</span>
+            </label>
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="birthday_notify_1d" class="settings-checkbox">
+              <span>Уведомлять за 1 день</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Повышенный бонус ── -->
+    <div class="settings-tab" id="tab-boost">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">Повышенный бонус</div>
+          <div class="settings-tab-sub">Увеличенное начисление в выбранные дни или даты</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <label class="settings-toggle-label">
+            <input type="checkbox" id="boost_enabled" class="settings-toggle-input">
+            <span class="settings-toggle-track"></span>
+            <span class="settings-toggle-text">Активно</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-form" id="boostFormContent">
+        <div class="settings-field">
+          <label class="settings-label">Повышенный процент</label>
+          <div class="settings-hint">Процент начисления во время акции</div>
+          <div class="settings-input-with-unit" style="max-width:220px">
+            <input id="boost_percent" type="number" class="settings-input" min="0" max="100" placeholder="7">
+            <span class="settings-unit">% от суммы чека</span>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Период действия</label>
+          <div class="d-flex flex-column gap-2 mt-2">
+            <label class="settings-checkbox-label">
+              <input type="checkbox" id="boost_always" class="settings-checkbox">
+              <span>Всегда (без ограничений)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Режим: дни недели или конкретные даты -->
+        <div id="boostScheduleWrap" class="settings-field mt-2">
+          <label class="settings-label">Режим расписания</label>
+          <div class="d-flex gap-2 mt-2">
+            <button class="boost-mode-btn active" data-mode="days" type="button">
+              <i class="bi bi-calendar-week me-1"></i> Дни недели
+            </button>
+            <button class="boost-mode-btn" data-mode="dates" type="button">
+              <i class="bi bi-calendar-date me-1"></i> Конкретные даты
+            </button>
+          </div>
+
+          <!-- Дни недели -->
+          <div id="boostWeekdaysWrap" class="mt-3">
+            <div class="settings-hint mb-2">Выберите дни когда действует повышенный бонус</div>
+            <div class="boost-weekdays-grid">
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="mon"><span>Пн</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="tue"><span>Вт</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="wed"><span>Ср</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="thu"><span>Чт</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="fri"><span>Пт</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="sat"><span>Сб</span></label>
+              <label class="boost-day-btn"><input type="checkbox" name="boost_weekday" value="sun"><span>Вс</span></label>
+            </div>
+          </div>
+
+          <!-- Конкретные даты -->
+          <div id="boostDatesWrap" class="mt-3 d-none">
+            <div class="settings-hint mb-2">Выберите даты из календаря</div>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <input type="date" id="boostDatePicker" class="settings-input" style="max-width:180px">
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="boostDateAddBtn">
+                <i class="bi bi-plus-circle me-1"></i> Добавить
+              </button>
+            </div>
+            <div id="boostDatesList" class="d-flex flex-wrap gap-2 mt-2"></div>
+          </div>
+          <input type="hidden" id="boost_mode" value="days">
+          <input type="hidden" id="boost_weekdays_json" value="[]">
+          <input type="hidden" id="boost_dates_json" value="[]">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ROI / Экономика ── -->
+    <div class="settings-tab" id="tab-roi">
+      <div class="settings-tab-header">
+        <div>
+          <div class="settings-tab-title">ROI и экономика</div>
+          <div class="settings-tab-sub">Стоимость привлечения — для расчёта эффективности лояльности</div>
+        </div>
+      </div>
+
+      <div class="settings-form">
+        <div class="settings-field">
+          <label class="settings-label">Стоимость лида (привлечения нового клиента)</label>
+          <div class="settings-hint">Сколько в среднем стоит привести одного нового клиента через рекламу</div>
+          <div class="settings-input-with-unit" style="max-width:260px">
+            <input id="cost_per_lead" type="number" class="settings-input" min="0" placeholder="5000">
+            <span class="settings-unit">₸</span>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Стоимость удержания клиента</label>
+          <div class="settings-hint">Средняя стоимость работы с одним повторным клиентом (CPA удержания)</div>
+          <div class="settings-input-with-unit" style="max-width:260px">
+            <input id="cost_per_client" type="number" class="settings-input" min="0" placeholder="1500">
+            <span class="settings-unit">₸</span>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-field">
+          <label class="settings-label">Как это используется</label>
+          <div class="settings-hint">
+            В аналитике появятся карточки:<br>
+            • <strong>Сэкономлено на рекламе</strong> — повторные клиенты × стоимость лида<br>
+            • <strong>Заработано через лояльность</strong> — выручка от повторных без рекламных затрат<br>
+            • <strong>ROI программы</strong> — отношение выручки к расходам на бонусы<br><br>
+            Если вы измените цены — старые периоды сохранят исторические расчёты,
+            новые будут считаться по актуальным ценам.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Кнопки снизу -->
+    <div class="settings-bottom-bar">
+      <div id="stMsg" class="small d-none"></div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" type="button" id="stReloadBtnBottom">
+          <i class="bi bi-arrow-repeat me-1"></i> Отмена
+        </button>
+        <button class="btn btn-success" type="button" id="stSaveBtnBottom">
+          <i class="bi bi-check2-circle me-1"></i> Сохранить изменения
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 {% endblock %}

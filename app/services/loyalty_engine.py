@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
-from app.models.settings import Settings
+from app.models.settings_model import Settings
 from app.models.bonus_grant import BonusGrant
 
 
@@ -34,7 +34,6 @@ def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = No
     """
     now = now or _now()
 
-    # activate
     grants = db.scalars(
         select(BonusGrant).where(
             BonusGrant.user_id == user_id,
@@ -46,7 +45,6 @@ def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = No
     for g in grants:
         g.status = "available"
 
-    # expire by date
     exp = db.scalars(
         select(BonusGrant).where(
             BonusGrant.user_id == user_id,
@@ -59,7 +57,6 @@ def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = No
         g.status = "expired"
         g.remaining = 0
 
-    # expire by empty
     empty = db.scalars(
         select(BonusGrant).where(
             BonusGrant.user_id == user_id,
@@ -74,6 +71,11 @@ def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = No
 
 
 def get_balances(db: Session, user_id: int, now: datetime | None = None) -> dict:
+    """
+    Возвращает реальный баланс из BonusGrant (не кэш из User.bonus_balance).
+    available — можно списать прямо сейчас
+    pending   — начислены но ещё не активированы (activation_days не прошли)
+    """
     now = now or _now()
     process_bonus_lifecycle(db, user_id=user_id, now=now)
 
@@ -96,13 +98,18 @@ def get_balances(db: Session, user_id: int, now: datetime | None = None) -> dict
     return {
         "available": int(available or 0),
         "pending": int(pending or 0),
+        # total показывается клиенту в карточке (available + pending)
+        "total": int(available or 0) + int(pending or 0),
     }
 
 
 def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | None = None) -> int:
     """
-    Списание FIFO по expires_at (сначала те, что раньше сгорят).
-    Возвращает фактически списанную сумму.
+    Списывает бонусы из available-грантов.
+    Гарантии:
+      - никогда не спишет больше чем реально available (даже при race condition)
+      - использует SELECT FOR UPDATE для row-level lock в PostgreSQL
+      - списывает от ближайших к истечению (FIFO по expires_at)
     """
     now = now or _now()
     to_spend = int(to_spend or 0)
@@ -111,6 +118,8 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
 
     process_bonus_lifecycle(db, user_id=user_id, now=now)
 
+    # SELECT FOR UPDATE — блокируем строки чтобы исключить race condition
+    # при параллельных запросах (PostgreSQL row-level lock)
     grants = db.scalars(
         select(BonusGrant)
         .where(
@@ -120,7 +129,16 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
             BonusGrant.remaining > 0,
         )
         .order_by(BonusGrant.expires_at.asc(), BonusGrant.created_at.asc())
+        .with_for_update()
     ).all()
+
+    # Реальный доступный баланс — считаем из заблокированных строк
+    real_available = sum(int(g.remaining) for g in grants)
+
+    # Жёсткий лимит: не можем списать больше чем есть в грантах
+    to_spend = min(to_spend, real_available)
+    if to_spend <= 0:
+        return 0
 
     spent = 0
     for g in grants:
@@ -130,8 +148,8 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
         g.remaining = int(g.remaining) - take
         spent += take
         to_spend -= take
-
         if g.remaining <= 0:
+            g.remaining = 0
             g.status = "expired"
 
     db.commit()
@@ -151,7 +169,6 @@ def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
     else:
         rate = int(settings.earn_bronze_percent)
 
-    # INT, округление вниз
     return int(paid_amount * rate // 100)
 
 
@@ -163,19 +180,31 @@ def redeem_cap(paid_amount: int, settings: Settings) -> int:
     return int(paid_amount * pct // 100)
 
 
-def grant_purchase_bonus(db: Session, user_id: int, earn: int, settings: Settings, now: datetime | None = None) -> None:
+def grant_purchase_bonus(
+    db: Session,
+    user_id: int,
+    earn: int,
+    settings: Settings,
+    txn_id: int | None = None,
+    now: datetime | None = None,
+) -> None:
     now = now or _now()
     earn = int(earn or 0)
     if earn <= 0:
         return
 
-    available_from = now + timedelta(days=int(settings.activation_days))
-    expires_at = available_from + timedelta(days=int(settings.burn_days))
+    activation_days = max(0, int(settings.activation_days or 0))
+    # burn_days минимум 1 день — иначе бонус истекает в момент начисления
+    burn_days = max(1, int(settings.burn_days or 365))
 
-    status = "available" if int(settings.activation_days) == 0 else "pending"
+    available_from = now + timedelta(days=activation_days)
+    # Срок жизни считается с момента активации (не начисления)
+    expires_at = available_from + timedelta(days=burn_days)
+    status = "available" if activation_days == 0 else "pending"
 
     g = BonusGrant(
         user_id=user_id,
+        transaction_id=txn_id,
         amount=earn,
         remaining=earn,
         status=status,

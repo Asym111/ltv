@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Superadmin — LTV Platform</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08080e;
+      --surface: #0f0f1c;
+      --surface2: #16162a;
+      --border: #22223a;
+      --border2: #2e2e50;
+      --accent: #00ff88;
+      --accent2: #7c3aed;
+      --accent3: #f59e0b;
+      --text: #f0f0ff;
+      --text2: #c0c0e0;
+      --muted: #7070a8;
+      --danger: #ff4466;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse at 0% 0%, rgba(124,58,237,.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 100% 100%, rgba(0,255,136,.04) 0%, transparent 50%);
+    }
+
+    /* ── HEADER ─────────────────────────────── */
+    .sa-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15,15,24,.8);
+      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .sa-brand {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+    .sa-badge {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: .85rem;
+      color: #fff;
+    }
+    .sa-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem; }
+    .sa-sub { font-size: .65rem; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+
+    .sa-header-actions { display: flex; gap: .75rem; align-items: center; }
+    .sa-time { font-size: .8rem; color: var(--text2); }
+
+    .btn-sm {
+      padding: .4rem .9rem;
+      border-radius: 7px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .75rem;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all .15s;
+      text-decoration: none;
+      display: inline-flex; align-items: center; gap: .4rem;
+    }
+    .btn-ghost { background: transparent; border-color: var(--border2); color: var(--text2); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: rgba(255,68,102,.1); border-color: rgba(255,68,102,.3); color: var(--danger); }
+    .btn-danger:hover { background: rgba(255,68,102,.2); }
+    .btn-accent { background: linear-gradient(135deg, var(--accent2), #5b21b6); border-color: transparent; color: #fff; }
+    .btn-accent:hover { opacity: .88; }
+    .btn-success { background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.3); color: var(--success); }
+    .btn-success:hover { background: rgba(16,185,129,.2); }
+    .btn-warning { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); color: var(--warning); }
+
+    /* ── MAIN ───────────────────────────────── */
+    .sa-main { padding: 2rem; max-width: 1400px; margin: 0 auto; }
+
+    /* ── KPI CARDS ──────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+    }
+    .kpi-label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--text2); margin-bottom: .6rem; font-weight: 600; }
+    .kpi-value { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.8rem; color: var(--text); }
+    .kpi-sub { font-size: .8rem; color: var(--text2); margin-top: .3rem; }
+
+    /* ── CREATE FORM ────────────────────────── */
+    .create-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .9rem;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      color: var(--text);
+    }
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      align-items: flex-end;
+    }
+    .form-group { display: flex; flex-direction: column; gap: .35rem; }
+    .form-group label { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); font-weight: 600; }
+    .form-group input, .form-group select {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: .55rem .85rem;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+    .form-group select { background-color: var(--bg); }
+
+    .fg-name { flex: 2; min-width: 160px; }
+    .fg-phone { flex: 1.5; min-width: 140px; }
+    .fg-pass { flex: 1.5; min-width: 140px; }
+    .fg-days { width: 90px; }
+    .fg-plan { width: 110px; }
+
+    .error-banner {
+      background: rgba(255,68,102,.1);
+      border: 1px solid rgba(255,68,102,.25);
+      border-radius: 10px;
+      padding: .75rem 1rem;
+      color: var(--danger);
+      font-size: .78rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── TABLE ──────────────────────────────── */
+    .table-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .table-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: .75rem 1rem;
+      font-size: .7rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text2);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr:last-child { border-bottom: none; }
+    td {
+      padding: .85rem 1rem;
+      font-size: .875rem;
+      vertical-align: middle;
+      color: var(--text);
+    }
+    .td-name { font-family: 'Syne', sans-serif; font-weight: 600; font-size: .85rem; }
+    .td-phone { color: var(--text2); font-size: .82rem; }
+    .td-stat { font-family: 'Syne', sans-serif; font-weight: 600; color: var(--text); }
+    .td-stat-sub { font-size: .75rem; color: var(--text2); }
+
+    /* ── STATUS BADGE ───────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      padding: .25rem .65rem;
+      border-radius: 20px;
+      font-size: .68rem;
+      font-weight: 500;
+      letter-spacing: .05em;
+      white-space: nowrap;
+    }
+    .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+    .badge-active    { background: rgba(16,185,129,.1);  color: var(--success); border: 1px solid rgba(16,185,129,.25); }
+    .badge-active::before { background: var(--success); }
+    .badge-unlimited { background: rgba(124,58,237,.1);  color: #a78bfa;  border: 1px solid rgba(124,58,237,.25); }
+    .badge-unlimited::before { background: #a78bfa; }
+    .badge-trial     { background: rgba(245,158,11,.1);  color: var(--warning); border: 1px solid rgba(245,158,11,.25); }
+    .badge-trial::before { background: var(--warning); }
+    .badge-expiring  { background: rgba(255,120,0,.1);   color: #fb923c;  border: 1px solid rgba(255,120,0,.25); }
+    .badge-expiring::before { background: #fb923c; }
+    .badge-expired   { background: rgba(255,68,102,.1);  color: var(--danger); border: 1px solid rgba(255,68,102,.25); }
+    .badge-expired::before { background: var(--danger); }
+    .badge-disabled  { background: rgba(100,100,120,.1); color: var(--muted); border: 1px solid var(--border2); }
+    .badge-disabled::before { background: var(--muted); }
+
+    /* ── ACTIONS CELL ───────────────────────── */
+    .actions-cell {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+      align-items: center;
+    }
+    .grant-form { display: flex; gap: .3rem; align-items: center; }
+    .grant-form input {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: .3rem .5rem;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .72rem;
+      width: 60px;
+      outline: none;
+      text-align: center;
+    }
+
+    .id-cell { color: var(--text2); font-size: .8rem; }
+
+    .access-date { font-size: .72rem; color: var(--text2); }
+    .access-date.soon { color: var(--warning); }
+    .access-date.expired { color: var(--danger); }
+
+    /* ── IMPERSONATE BANNER ─────────────────── */
+    .imp-banner {
+      background: rgba(245,158,11,.08);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 10px;
+      padding: .75rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .imp-banner span { font-size: .8rem; color: var(--warning); }
+
+    @media (max-width: 768px) {
+      .sa-main { padding: 1rem; }
+      .form-row { flex-direction: column; }
+      .fg-name, .fg-phone, .fg-pass { min-width: 0; width: 100%; }
+      table { font-size: .72rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="sa-header">
+  <div class="sa-brand">
+    <div class="sa-badge">SA</div>
+    <div>
+      <div class="sa-title">LTV Superadmin</div>
+      <div class="sa-sub">Platform Management</div>
+    </div>
+  </div>
+  <div class="sa-header-actions">
+    <span class="sa-time">{{ now.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+    <a href="/superadmin/logout" class="btn-sm btn-ghost">
+      <i class="bi bi-box-arrow-right"></i> Выйти
+    </a>
+  </div>
+</header>
+
+<main class="sa-main">
+
+  {% if request.query_params.get('error') == 'phone_exists' %}
+  <div class="error-banner">
+    <i class="bi bi-exclamation-triangle me-1"></i> Телефон уже существует в системе — выберите другой.
+  </div>
+  {% endif %}
+
+  <!-- KPI -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Всего тенантов</div>
+      <div class="kpi-value">{{ total_tenants }}</div>
+      <div class="kpi-sub">зарегистрировано</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Активных</div>
+      <div class="kpi-value" style="color:var(--success)">{{ active_tenants }}</div>
+      <div class="kpi-sub">с действующей подпиской</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Клиентов в системе</div>
+      <div class="kpi-value">{{ total_users }}</div>
+      <div class="kpi-sub">end-users по всем тенантам</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Выручка (30 дн)</div>
+      <div class="kpi-value" style="color:var(--accent)">{{ "{:,}".format(total_revenue_30d) }}</div>
+      <div class="kpi-sub">сумма транзакций KZT</div>
+    </div>
+  </div>
+
+  <!-- Форма создания -->
+  <div class="create-section">
+    <div class="section-title">
+      <i class="bi bi-plus-circle"></i> Создать новый аккаунт
+    </div>
+    <form method="post" action="/superadmin/tenants/create">
+      <div class="form-row">
+        <div class="form-group fg-name">
+          <label>Название бизнеса</label>
+          <input type="text" name="name" placeholder="ИП Иванов / Кафе Астана" required/>
+        </div>
+        <div class="form-group fg-phone">
+          <label>Телефон owner</label>
+          <input type="text" name="owner_phone" placeholder="77001234567" required/>
+        </div>
+        <div class="form-group fg-pass">
+          <label>Пароль</label>
+          <input type="text" name="owner_password" placeholder="пароль" required/>
+        </div>
+        <div class="form-group fg-days">
+          <label>Дней</label>
+          <input type="number" name="grant_days" value="30" min="0"/>
+        </div>
+        <div class="form-group fg-plan">
+          <label>План</label>
+          <select name="plan">
+            <option value="trial">Trial</option>
+            <option value="basic">Basic</option>
+            <option value="pro">Pro</option>
+            <option value="unlimited">Unlimited</option>
+          </select>
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <button type="submit" class="btn-sm btn-accent" style="padding:.56rem 1.2rem">
+            <i class="bi bi-plus"></i> Создать
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Таблица тенантов -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="section-title" style="margin:0">
+        <i class="bi bi-buildings"></i> Все аккаунты ({{ total_tenants }})
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Аккаунт</th>
+            <th>Статус</th>
+            <th>Доступ до</th>
+            <th>Клиенты</th>
+            <th>Транзакций</th>
+            <th>Выручка 30д</th>
+            <th>Сотрудники</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          {% set t = r.tenant %}
+          <tr>
+            <td class="id-cell">#{{ t.id }}</td>
+            <td>
+              <div class="td-name">{{ t.name }}</div>
+              <div class="td-phone">{{ r.owner_phone }} · {{ r.owner_name }}</div>
+            </td>
+            <td>
+              {% if r.sub_status == 'active' %}
+                <span class="badge badge-active">Active</span>
+              {% elif r.sub_status == 'unlimited' %}
+                <span class="badge badge-unlimited">Unlimited</span>
+              {% elif r.sub_status == 'expiring' %}
+                <span class="badge badge-expiring">Истекает</span>
+              {% elif r.sub_status == 'expired' %}
+                <span class="badge badge-expired">Expired</span>
+              {% elif r.sub_status == 'disabled' %}
+                <span class="badge badge-disabled">Disabled</span>
+              {% else %}
+                <span class="badge badge-trial">Trial</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.access_until %}
+                <span class="access-date {% if r.sub_status == 'expiring' %}soon{% elif r.sub_status == 'expired' %}expired{% endif %}">
+                  {{ t.access_until.strftime('%d.%m.%Y') }}
+                </span>
+              {% else %}
+                <span style="color:var(--muted)">∞</span>
+              {% endif %}
+            </td>
+            <td><span class="td-stat">{{ r.users_count }}</span></td>
+            <td>
+              <span class="td-stat">{{ r.txn_count }}</span>
+              <div class="td-stat-sub">{{ r.txn_30d }} за 30д</div>
+            </td>
+            <td>
+              <span class="td-stat">{{ "{:,}".format(r.revenue_30d) }}</span>
+              <div class="td-stat-sub">₸</div>
+            </td>
+            <td><span class="td-stat">{{ r.auth_users }}</span></td>
+            <td>
+              <div class="actions-cell">
+                <!-- +дни -->
+                <form class="grant-form" method="post" action="/superadmin/tenants/{{ t.id }}/grant">
+                  <input type="number" name="days" value="30" min="1" title="Дней доступа"/>
+                  <button type="submit" class="btn-sm btn-success" title="+дни">
+                    <i class="bi bi-calendar-plus"></i>
+                  </button>
+                </form>
+
+                <!-- Enable/Disable -->
+                <form method="post" action="/superadmin/tenants/{{ t.id }}/toggle">
+                  <input type="hidden" name="is_active" value="{{ 0 if t.is_active else 1 }}"/>
+                  {% if t.is_active %}
+                    <button type="submit" class="btn-sm btn-danger" title="Отключить">
+                      <i class="bi bi-slash-circle"></i>
+                    </button>
+                  {% else %}
+                    <button type="submit" class="btn-sm btn-success" title="Включить">
+                      <i class="bi bi-check-circle"></i>
+                    </button>
+                  {% endif %}
+                </form>
+
+                <!-- Импersonация -->
+                <form method="post" action="/superadmin/tenants/{{ t.id }}/impersonate">
+                  <button type="submit" class="btn-sm btn-ghost" title="Войти как owner">
+                    <i class="bi bi-person-badge"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">
+              Нет аккаунтов. Создайте первый выше.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

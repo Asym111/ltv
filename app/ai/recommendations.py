@@ -12,7 +12,7 @@ def heuristic_insights_and_recos(db: Session) -> dict[str, Any]:
     """
     Фолбэк без LLM: даём минимально полезные инсайты и рекомендации.
     """
-    payload = build_overview_payload(db)
+    payload = build_overview_payload(db)  # передай tenant_id если нужна изоляция
     s = payload["summary"]
     pareto = payload["pareto"]
 

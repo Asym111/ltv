@@ -41,6 +41,14 @@ class AnalyticsAlertOut(BaseModel):
     href: str = ""
 
 
+class DailyRevenueOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day: str
+    revenue: int
+    tx_count: int
+
+
 class AnalyticsOverviewOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,6 +60,9 @@ class AnalyticsOverviewOut(BaseModel):
     clients_total: int
     users_with_tx: int
     total_spent: int
+
+    # График по дням (добавлен в services/analytics.py)
+    daily_30: List[DailyRevenueOut] = []
 
 
 class AnalyticsSegmentClientOut(BaseModel):

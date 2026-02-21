@@ -17,341 +17,430 @@
     <div class="card p-3">
       <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
         <div>
-          <div class="h6 mb-0">Транзакции</div>
-          <div class="text-muted small">Поиск по телефону или просмотр всех транзакций за всё время.</div>
+          <div class="h6 mb-0">Поиск транзакций</div>
+          <div class="text-muted small">Введи телефон клиента и нажми “Найти”.</div>
         </div>
 
         <div class="d-flex gap-2">
-          <input id="txPhone" class="form-control" style="min-width: 280px;" placeholder="77001234567 или 87770000000"/>
-          <button class="btn btn-primary" type="button" id="txSearchBtn">
-            <i class="bi bi-search me-1"></i> Найти
-          </button>
+          <input class="form-control" id="txPhoneInput" placeholder="77001234567 или 87770000000" style="min-width: 280px;">
+          <button class="btn btn-primary" id="txSearchBtn"><i class="bi bi-search me-1"></i>Найти</button>
         </div>
       </div>
-
-      <div class="text-muted small mt-2">
-        Подсказка: оставь поле телефона пустым и нажми “Найти” — загрузятся последние 200 транзакций.
-      </div>
+      <div class="text-muted small mt-2">Подсказка: оставь поле телефона пустым и нажми “Найти” — загрузятся последние 200 транзакций.</div>
     </div>
   </div>
 
   <div class="col-12">
     <div class="card p-3">
       <div class="d-flex align-items-center justify-content-between">
-        <div class="h6 mb-0">Результаты</div>
-        <div class="text-muted small" id="txCount">—</div>
+        <div>
+          <div class="h6 mb-0">Результаты</div>
+          <div class="text-muted small" id="txMeta"></div>
+        </div>
+        <div class="text-muted small">Лимит: 200</div>
       </div>
 
-      <div class="table-responsive mt-2">
+      <div class="table-responsive mt-3">
         <table class="table table-sm align-middle">
           <thead>
-            <tr class="text-muted">
+            <tr>
               <th>ID</th>
               <th>Дата</th>
               <th>Телефон</th>
               <th class="text-end">Сумма</th>
-              <th class="text-end">Оплачено</th>
               <th class="text-end">Списано</th>
               <th class="text-end">Начислено</th>
+              <th>Статус</th>
               <th>Комментарий</th>
-              <th></th>
+              <th class="text-end">Действия</th>
             </tr>
           </thead>
-          <tbody id="txTbody">
-            <tr><td colspan="9" class="text-muted">Загрузка…</td></tr>
-          </tbody>
+          <tbody id="txTbody"></tbody>
         </table>
       </div>
-
     </div>
   </div>
 
 </div>
 
-<!-- Create TX Modal -->
+<!-- Create Transaction Modal -->
 <div class="modal fade" id="txCreateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <div>
           <div class="h6 mb-0">Создать транзакцию</div>
-          <div class="text-muted small">Проведение транзакции выполняется здесь (создание + начисление/списание).</div>
+          <div class="text-muted small">Создание + начисление/списание выполняется здесь.</div>
         </div>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
       </div>
 
       <div class="modal-body">
-        <div class="row g-2">
-
+        <div class="row g-3">
           <div class="col-12 col-md-4">
             <label class="form-label">Телефон</label>
-            <input class="form-control" id="c_phone" placeholder="77001234567" />
+            <input class="form-control" id="txUserPhone" placeholder="77001234567">
+            <div class="small text-muted mt-1" id="txClientMeta"></div>
           </div>
 
           <div class="col-12 col-md-4">
             <label class="form-label">Сумма</label>
-            <input class="form-control" id="c_amount" type="number" min="0" step="1" value="100000"/>
-          </div>
-
-          <div class="col-12 col-md-4">
-            <label class="form-label">Оплачено</label>
-            <input class="form-control" id="c_paid" type="number" min="0" step="1" placeholder="Если пусто — возьмём amount"/>
+            <input class="form-control" id="txAmount" type="number" min="1" step="1" value="100000">
           </div>
 
           <div class="col-12 col-md-4">
             <label class="form-label">Списать</label>
-            <input class="form-control" id="c_redeem" type="number" min="0" step="1" value="0"/>
+            <input class="form-control" id="txRedeem" type="number" min="0" step="1" value="0">
+            <div class="small text-muted mt-1" id="txRedeemHint">Доступно: —</div>
           </div>
 
           <div class="col-12 col-md-4">
             <label class="form-label">Метод оплаты</label>
-            <select class="form-select" id="c_method">
+            <select class="form-select" id="txPaymentMethod">
               <option value="CASH" selected>Наличка</option>
-<option value="CARD">Карта</option>
-<option value="TRANSFER">Перевод</option>
-<option value="MIXED">Смешанная</option>
-<option value="OTHER">Другое</option>
-
+              <option value="CARD">Карта</option>
+              <option value="TRANSFER">Перевод</option>
+              <option value="MIXED">Смешанный</option>
+              <option value="OTHER">Другое</option>
             </select>
           </div>
 
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-8">
             <label class="form-label">Комментарий</label>
-            <input class="form-control" id="c_comment" placeholder="Например: № чека"/>
+            <input class="form-control" id="txComment" placeholder="Комментарий (опционально)">
           </div>
 
           <div class="col-12">
-            <div class="small text-muted mt-2">Если клиента нет — можно указать данные для автосоздания (опционально)</div>
+            <div class="text-muted small">Если клиента нет — можно указать данные для автосоздания (опционально)</div>
           </div>
 
-          <div class="col-12 col-md-6">
+          <div class="col-12 col-md-5">
             <label class="form-label">ФИО (full_name)</label>
-            <input class="form-control" id="c_name" placeholder="Asym Test"/>
+            <input class="form-control" id="txFullName" placeholder="Asym Test">
           </div>
 
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-4">
             <label class="form-label">Дата рождения (birth_date)</label>
-            <input class="form-control" id="c_birth" type="date"/>
+            <input class="form-control" id="txBirthDate" placeholder="ДД.ММ.ГГГГ">
           </div>
 
           <div class="col-12 col-md-3">
             <label class="form-label">Уровень</label>
-            <select class="form-select" id="c_tier">
+            <select class="form-select" id="txTier">
               <option value="">Авто</option>
               <option value="Bronze">Bronze</option>
               <option value="Silver">Silver</option>
               <option value="Gold">Gold</option>
             </select>
           </div>
-
-          <div class="col-12">
-            <div id="c_error" class="text-danger small d-none"></div>
-          </div>
-
         </div>
+
+        <div class="alert alert-danger d-none mt-3" id="txCreateError"></div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Отмена</button>
-        <button class="btn btn-success" type="button" id="c_submit">
-          <i class="bi bi-check2-circle me-1"></i> Провести
-        </button>
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-success" id="txCreateSubmit"><i class="bi bi-check2-circle me-1"></i>Провести</button>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Refund Modal -->
+<div class="modal fade" id="txRefundModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-md modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <div class="h6 mb-0">Возврат</div>
+          <div class="text-muted small" id="txRefundTitle"></div>
+        </div>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="txRefundFull">
+          <label class="form-check-label" for="txRefundFull">Полный возврат</label>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Сумма возврата</label>
+          <input class="form-control" id="txRefundAmount" type="number" min="1" step="1" placeholder="Например: 50000">
+          <div class="small text-muted mt-1" id="txRefundHint"></div>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Комментарий</label>
+          <input class="form-control" id="txRefundComment" placeholder="Причина/примечание (опционально)">
+        </div>
+
+        <div class="alert alert-danger d-none mt-2" id="txRefundError"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-danger" id="txRefundSubmit"><i class="bi bi-arrow-counterclockwise me-1"></i>Сделать возврат</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  function normalizePhoneLocal(v) {
-    const digits = String(v || "").replace(/\D/g, "");
-    if (!digits) return "";
-    if (digits.startsWith("8") && digits.length === 11) return "7" + digits.slice(1);
-    if (digits.startsWith("7") && digits.length === 11) return digits;
-    if (digits.length === 10) return "7" + digits;
-    return digits;
-  }
+document.addEventListener("DOMContentLoaded", () => {
+  const txTbody = document.getElementById('txTbody');
+  const txMeta = document.getElementById('txMeta');
+  const txPhoneInput = document.getElementById('txPhoneInput');
+  const txSearchBtn = document.getElementById('txSearchBtn');
+  const txRefreshBtn = document.getElementById('txRefreshBtn');
+  const txOpenCreateBtn = document.getElementById('txOpenCreateBtn');
 
-  function fmtMoneyLocal(n) {
-    const x = Number(n);
-    if (!Number.isFinite(x)) return "—";
-    return x.toLocaleString("ru-RU");
-  }
+  const txCreateModal = new bootstrap.Modal(document.getElementById('txCreateModal'));
+  const txCreateError = document.getElementById('txCreateError');
+  const txCreateSubmit = document.getElementById('txCreateSubmit');
 
-  function safeInt(v, fallback=0) {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.trunc(n) : fallback;
-  }
+  const txUserPhone = document.getElementById('txUserPhone');
+  const txClientMeta = document.getElementById('txClientMeta');
+  const txRedeemHint = document.getElementById('txRedeemHint');
 
-  function fmtDateLocal(dt) {
-    try {
-      if (!dt) return "—";
-      return new Date(dt).toLocaleString("ru-RU");
-    } catch {
-      return "—";
-    }
-  }
+  const txRefundModal = new bootstrap.Modal(document.getElementById('txRefundModal'));
+  const txRefundTitle = document.getElementById('txRefundTitle');
+  const txRefundHint = document.getElementById('txRefundHint');
+  const txRefundFull = document.getElementById('txRefundFull');
+  const txRefundAmount = document.getElementById('txRefundAmount');
+  const txRefundComment = document.getElementById('txRefundComment');
+  const txRefundError = document.getElementById('txRefundError');
+  const txRefundSubmit = document.getElementById('txRefundSubmit');
+
+  let lastPhone = '';
+  let refundTx = null;
+  let currentClientAvailable = null;
 
   async function apiGetJson(url) {
-    const r = await fetch(url, { headers: { "Accept": "application/json" } });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.detail || "Request failed");
-    return data;
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' }});
+    if (!r.ok) throw new Error(await r.text());
+    return await r.json();
   }
 
   async function apiPostJson(url, payload) {
     const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(payload),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
     });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.detail || "Request failed");
-    return data;
+    if (!r.ok) throw new Error(await r.text());
+    return await r.json();
   }
 
-  function renderTxRows(arr) {
-    const tbody = document.getElementById("txTbody");
-    const count = document.getElementById("txCount");
+  function fmtDate(s) {
+    try { return new Date(s).toLocaleString(); } catch { return s; }
+  }
 
-    if (!Array.isArray(arr) || arr.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="text-muted">Транзакции не найдены.</td></tr>`;
-      count.textContent = "0";
-      return;
-    }
+  function esc(s) {
+    return (s ?? '').toString()
+      .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  }
 
-    count.textContent = String(arr.length);
+  function statusBadge(tx) {
+    const st = tx.status || 'completed';
+    if (st === 'refunded') return '<span class="badge text-bg-danger">Возврат</span>';
+    if (st === 'partially_refunded') return '<span class="badge text-bg-warning">Частичный возврат</span>';
+    return '<span class="badge text-bg-success">Принято</span>';
+  }
 
-    tbody.innerHTML = arr.map(t => {
-      const id = t.id ?? "—";
-      const created = fmtDateLocal(t.created_at ?? t.createdAt);
-      const phone = t.user_phone ?? "—";
-      const amount = fmtMoneyLocal(t.amount);
-      const paid = fmtMoneyLocal(t.paid_amount ?? t.paidAmount ?? t.amount);
-      const redeem = fmtMoneyLocal(t.redeem_points ?? t.redeemPoints ?? 0);
-      const earned = fmtMoneyLocal(t.earned_points ?? t.earnedPoints ?? 0);
-      const comment = (t.comment ?? "").toString();
+  function renderTxRows(rows) {
+    txTbody.innerHTML = '';
+    for (const t of rows) {
+      const canRefund = (t.status !== 'refunded');
+      const btnRefund = canRefund
+        ? `<button class="btn btn-sm btn-outline-danger" data-act="refund" data-id="${t.id}"><i class="bi bi-arrow-counterclockwise me-1"></i>Возврат</button>`
+        : `<button class="btn btn-sm btn-outline-danger" disabled><i class="bi bi-arrow-counterclockwise me-1"></i>Возврат</button>`;
 
-      return `
-        <tr>
-          <td>${id}</td>
-          <td class="text-muted">${created}</td>
-          <td>${phone}</td>
-          <td class="text-end">${amount}</td>
-          <td class="text-end">${paid}</td>
-          <td class="text-end">${redeem}</td>
-          <td class="text-end">${earned}</td>
-          <td class="text-muted">${comment}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-secondary" href="/admin/client/${phone}">
-              Карточка
-            </a>
-          </td>
-        </tr>
+      const btnCard = `<a class="btn btn-sm btn-outline-secondary" href="/admin/client/${encodeURIComponent(t.user_phone || '')}">Карточка</a>`;
+
+      const refundedInfo = (t.refunded_amount && t.refunded_amount > 0)
+        ? `<div class="small text-muted">Возврат: ${t.refunded_amount}</div>`
+        : '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${t.id}</td>
+        <td>${fmtDate(t.created_at)}</td>
+        <td>${esc(t.user_phone || '')}</td>
+        <td class="text-end">${t.amount}</td>
+        <td class="text-end">${t.redeem_points}</td>
+        <td class="text-end">${t.earned_points}</td>
+        <td>${statusBadge(t)}${refundedInfo}</td>
+        <td>${esc(t.comment || '')}</td>
+        <td class="text-end d-flex gap-2 justify-content-end">
+          ${btnCard}
+          ${btnRefund}
+        </td>
       `;
-    }).join("");
+      txTbody.appendChild(tr);
+    }
   }
 
-  async function loadAll(limit=200) {
-    const data = await apiGetJson(`/api/transactions/?limit=${limit}&offset=0`);
-    renderTxRows(data);
+  async function loadTransactions(phone) {
+    const qs = new URLSearchParams({ limit: '200', offset: '0' });
+    if (phone) qs.set('phone', phone);
+    const rows = await apiGetJson(`/api/transactions/?${qs.toString()}`);
+    txMeta.textContent = phone ? `Найдено: ${rows.length} (тел: ${phone})` : `Последние: ${rows.length}`;
+    renderTxRows(rows);
   }
 
-  async function loadByPhone(phone) {
-    const data = await apiGetJson(`/api/transactions/by-phone/${phone}`);
-    renderTxRows(data);
-  }
+  async function loadClientMeta(phone) {
+    currentClientAvailable = null;
+    txClientMeta.textContent = '';
+    txRedeemHint.textContent = 'Доступно: —';
 
-  async function onSearch() {
-    const raw = document.getElementById("txPhone").value;
-    const phone = normalizePhoneLocal(raw);
+    const p = (phone || '').trim();
+    if (!p) return;
 
     try {
-      if (phone) {
-        await loadByPhone(phone);
-      } else {
-        await loadAll(200);
+      const c = await apiGetJson(`/api/crm/client/${encodeURIComponent(p)}`);
+      const name = c.full_name || '—';
+      const tier = c.tier || '—';
+      const bal = (c.bonus_balance ?? c.available ?? null);
+
+      if (bal !== null && bal !== undefined) currentClientAvailable = Number(bal);
+
+      txClientMeta.textContent = `Клиент: ${name} • Уровень: ${tier}`;
+      txRedeemHint.textContent = `Доступно: ${currentClientAvailable ?? '—'}`;
+
+      document.getElementById('txFullName').value = c.full_name || '';
+      document.getElementById('txTier').value = c.tier || '';
+
+      if (c.birth_date) {
+        const d = new Date(c.birth_date);
+        if (!isNaN(d.getTime())) {
+          const dd = String(d.getDate()).padStart(2,'0');
+          const mm = String(d.getMonth()+1).padStart(2,'0');
+          const yy = d.getFullYear();
+          document.getElementById('txBirthDate').value = `${dd}.${mm}.${yy}`;
+        }
       }
     } catch (e) {
-      uiToast(`Ошибка: ${e.message}`, "error");
-      document.getElementById("txTbody").innerHTML =
-        `<tr><td colspan="9" class="text-danger">Ошибка загрузки транзакций</td></tr>`;
-      document.getElementById("txCount").textContent = "—";
+      txClientMeta.textContent = 'Клиент не найден — будет создан при проведении.';
     }
   }
 
-  // ===== Create TX =====
-  const modalEl = document.getElementById("txCreateModal");
-  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-  function openCreate() {
-    document.getElementById("c_error").classList.add("d-none");
-    const p = normalizePhoneLocal(document.getElementById("txPhone").value);
-    if (p) document.getElementById("c_phone").value = p;
-    modal.show();
+  function parseBirthDate(s) {
+    const v = (s || '').trim();
+    if (!v) return null;
+    const m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!m) return null;
+    const dd = m[1], mm = m[2], yy = m[3];
+    return `${yy}-${mm}-${dd}`;
   }
 
-  async function createTx() {
-    const err = document.getElementById("c_error");
-    err.classList.add("d-none");
-
-    const phone = normalizePhoneLocal(document.getElementById("c_phone").value);
-    const amount = safeInt(document.getElementById("c_amount").value, 0);
-    const paidRaw = document.getElementById("c_paid").value;
-    const paid_amount = paidRaw === "" ? null : safeInt(paidRaw, 0);
-    const redeem_points = safeInt(document.getElementById("c_redeem").value, 0);
-
-    const payment_method = document.getElementById("c_method").value || "CASH";
-    const comment = (document.getElementById("c_comment").value || "").trim();
-
-    const full_name = (document.getElementById("c_name").value || "").trim();
-    const birth_date = document.getElementById("c_birth").value || null;
-    const tier = document.getElementById("c_tier").value || null;
-
-    if (!phone) return uiToast("Введите телефон", "warning");
-    if (!amount || amount <= 0) return uiToast("Сумма должна быть > 0", "warning");
-    if (redeem_points < 0) return uiToast("Списать < 0 нельзя", "warning");
-
-    const payload = {
-      user_phone: phone,
-      amount,
-      paid_amount,
-      redeem_points,
-      payment_method,
-      comment,
-      full_name: full_name || null,
-      birth_date,
-      tier,
-    };
-
-    try {
-      await apiPostJson("/api/transactions/", payload);
-      uiToast("Транзакция проведена", "success");
-      modal.hide();
-
-      // обновить таблицу: если есть телефон — по телефону, иначе “все”
-      document.getElementById("txPhone").value = phone;
-      await loadByPhone(phone);
-    } catch (e) {
-      err.textContent = "Ошибка проведения: " + e.message;
-      err.classList.remove("d-none");
-      uiToast("Ошибка создания транзакции", "error");
-    }
-  }
-
-  // events
-  document.getElementById("txSearchBtn").addEventListener("click", onSearch);
-  document.getElementById("txPhone").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") onSearch();
+  txSearchBtn.addEventListener('click', async () => {
+    const phone = txPhoneInput.value.trim();
+    lastPhone = phone;
+    await loadTransactions(phone);
   });
 
-  document.getElementById("txRefreshBtn").addEventListener("click", onSearch);
-  document.getElementById("txOpenCreateBtn").addEventListener("click", openCreate);
-  document.getElementById("c_submit").addEventListener("click", createTx);
+  txRefreshBtn.addEventListener('click', async () => {
+    await loadTransactions(lastPhone);
+  });
 
-  // initial load: последние транзакции
-  loadAll(200);
+  txOpenCreateBtn.addEventListener('click', async () => {
+    txCreateError.classList.add('d-none');
+    txCreateError.textContent = '';
+    document.getElementById('txAmount').value = 100000;
+    document.getElementById('txRedeem').value = 0;
+    document.getElementById('txPaymentMethod').value = 'CASH';
+    document.getElementById('txComment').value = '';
+    txUserPhone.value = (txPhoneInput.value || '').trim();
+    document.getElementById('txFullName').value = '';
+    document.getElementById('txBirthDate').value = '';
+    document.getElementById('txTier').value = '';
+
+    await loadClientMeta(txUserPhone.value);
+    txCreateModal.show();
+  });
+
+  txUserPhone.addEventListener('blur', async () => {
+    await loadClientMeta(txUserPhone.value);
+  });
+
+  txCreateSubmit.addEventListener('click', async () => {
+    txCreateSubmit.disabled = true;
+    txCreateError.classList.add('d-none');
+
+    try {
+      const payload = {
+        user_phone: txUserPhone.value.trim(),
+        amount: Number(document.getElementById('txAmount').value || 0),
+        redeem_points: Number(document.getElementById('txRedeem').value || 0),
+        payment_method: document.getElementById('txPaymentMethod').value,
+        comment: document.getElementById('txComment').value || '',
+        full_name: document.getElementById('txFullName').value || null,
+        birth_date: parseBirthDate(document.getElementById('txBirthDate').value),
+        tier: document.getElementById('txTier').value || null
+      };
+
+      if (currentClientAvailable !== null && payload.redeem_points > currentClientAvailable) {
+        payload.redeem_points = currentClientAvailable;
+      }
+
+      await apiPostJson('/api/transactions/', payload);
+      txCreateModal.hide();
+      await loadTransactions(lastPhone);
+    } catch (e) {
+      txCreateError.textContent = (e && e.message) ? e.message : String(e);
+      txCreateError.classList.remove('d-none');
+    } finally {
+      txCreateSubmit.disabled = false;
+    }
+  });
+
+  txTbody.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button[data-act="refund"]');
+    if (!btn) return;
+    const id = Number(btn.getAttribute('data-id'));
+    refundTx = id;
+
+    txRefundError.classList.add('d-none');
+    txRefundError.textContent = '';
+    txRefundFull.checked = false;
+    txRefundAmount.value = '';
+    txRefundComment.value = '';
+
+    txRefundTitle.textContent = `Транзакция #${id}`;
+    txRefundHint.textContent = 'Можно полный или частичный возврат. Бонусы будут скорректированы автоматически.';
+
+    txRefundModal.show();
+  });
+
+  txRefundFull.addEventListener('change', () => {
+    txRefundAmount.disabled = txRefundFull.checked;
+  });
+
+  txRefundSubmit.addEventListener('click', async () => {
+    txRefundSubmit.disabled = true;
+    txRefundError.classList.add('d-none');
+
+    try {
+      const payload = {
+        full_refund: txRefundFull.checked,
+        amount: txRefundFull.checked ? null : Number(txRefundAmount.value || 0),
+        comment: txRefundComment.value || ''
+      };
+      await apiPostJson(`/api/transactions/${refundTx}/refund`, payload);
+      txRefundModal.hide();
+      await loadTransactions(lastPhone);
+    } catch (e) {
+      txRefundError.textContent = (e && e.message) ? e.message : String(e);
+      txRefundError.classList.remove('d-none');
+    } finally {
+      txRefundSubmit.disabled = false;
+    }
+  });
+
+  loadTransactions('');
+});
 </script>
 {% endblock %}

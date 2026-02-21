@@ -8,27 +8,28 @@ from app.core.database import Base
 
 
 class BonusGrant(Base):
-    """
-    Начисление бонусов отдельными партиями (грантами), чтобы:
-    - корректно активировать через N дней
-    - корректно сжигать через burn_days
-    - списывать FIFO (сначала те, что раньше сгорят)
-    """
     __tablename__ = "bonus_grants"
 
     id = Column(Integer, primary_key=True, index=True)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    amount = Column(Integer, nullable=False, default=0)      # начислено всего
-    remaining = Column(Integer, nullable=False, default=0)   # осталось к списанию
+    # ✅ Связь начисления с транзакцией (для корректных возвратов)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, index=True)
 
-    status = Column(String, nullable=False, default="pending")  # pending | available | expired
+    amount = Column(Integer, nullable=False, default=0)
+    remaining = Column(Integer, nullable=False, default=0)
 
-    available_from = Column(DateTime, nullable=False, index=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
+    # pending / available / expired
+    status = Column(String, nullable=False, default="pending")
 
-    source = Column(String, nullable=False, default="purchase")  # purchase | birthday | manual
+    available_from = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    # purchase / birthday / refund_redeem / etc
+    source = Column(String, nullable=False, default="purchase")
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="bonus_grants")
+    transaction = relationship("Transaction", back_populates="bonus_grants")

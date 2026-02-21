@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<div class="d-flex gap-2 align-items-center">
+  <div id="waStatusBadge" class="badge text-bg-secondary">Проверка…</div>
+  <button class="btn btn-sm btn-outline-secondary" type="button" id="waRefreshStatus">
+    <i class="bi bi-arrow-repeat"></i>
+  </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- ── Левая колонка: Отправить одному + Шаблоны ── -->
+  <div class="col-12 col-lg-5">
+
+    <!-- Отправить одному клиенту -->
+    <div class="card p-3 mb-3">
+      <div class="h6 mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-person-fill" style="color:var(--mint)"></i>
+        Отправить клиенту
+      </div>
+
+      <div id="waSendErr" class="text-danger small d-none mb-2"></div>
+      <div id="waSendOk" class="text-success small d-none mb-2"></div>
+
+      <div class="d-flex flex-column gap-2">
+        <div>
+          <label class="settings-label">Телефон</label>
+          <input id="waPhone" type="text" class="settings-input mt-1"
+                 placeholder="77001234567">
+        </div>
+        <div>
+          <label class="settings-label">Сообщение</label>
+          <textarea id="waMessage" class="settings-textarea mt-1" rows="4"
+                    placeholder="Введите текст или выберите шаблон ниже…"></textarea>
+          <div class="d-flex justify-content-between mt-1">
+            <span class="text-muted" style="font-size:.75rem">
+              Переменные: {name}, {phone}, {bonus}
+            </span>
+            <span id="waCharCount" class="text-muted" style="font-size:.75rem">0</span>
+          </div>
+        </div>
+        <button class="btn btn-success" type="button" id="waSendBtn">
+          <i class="bi bi-whatsapp me-1"></i> Отправить
+        </button>
+      </div>
+    </div>
+
+    <!-- Шаблоны -->
+    <div class="card p-3">
+      <div class="h6 mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-chat-square-text" style="color:var(--mint)"></i>
+        Шаблоны
+      </div>
+      <div id="waTemplatesList" class="d-flex flex-column gap-2">
+        <div class="text-muted small">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Правая колонка: Массовая рассылка ── -->
+  <div class="col-12 col-lg-7">
+
+    <!-- Рассылка по кампании -->
+    <div class="card p-3 mb-3">
+      <div class="h6 mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-megaphone-fill" style="color:var(--mint)"></i>
+        Рассылка по кампании
+      </div>
+
+      <div class="d-flex flex-column gap-3">
+        <div>
+          <label class="settings-label">Кампания</label>
+          <select id="waCampaignSelect" class="settings-select mt-1">
+            <option value="">— Выберите кампанию —</option>
+          </select>
+          <div id="waCampaignInfo" class="text-muted small mt-1 d-none"></div>
+        </div>
+
+        <div>
+          <label class="settings-label">Шаблон сообщения</label>
+          <textarea id="waCampaignTemplate" class="settings-textarea mt-1" rows="4"
+                    placeholder="Привет, {name}! Для вас {bonus} бонусов 🎁"></textarea>
+          <div class="d-flex justify-content-between mt-1">
+            <span class="text-muted" style="font-size:.75rem">Переменные: {name}, {phone}, {bonus}, {campaign_name}</span>
+          </div>
+        </div>
+
+        <!-- Предпросмотр -->
+        <div>
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <label class="settings-label">Предпросмотр</label>
+            <button class="btn btn-xs" type="button" id="waPreviewBtn">
+              <i class="bi bi-eye me-1"></i> Обновить
+            </button>
+          </div>
+          <div id="waPreviewBox" class="wa-preview-box">
+            <div class="text-muted small">Нажмите «Обновить» для предпросмотра</div>
+          </div>
+        </div>
+
+        <div id="waCampaignErr" class="text-danger small d-none"></div>
+        <div id="waCampaignOk"  class="text-success small d-none"></div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary" type="button" id="waDryRunBtn">
+            <i class="bi bi-eye me-1"></i> Тест (dry run)
+          </button>
+          <button class="btn btn-success flex-grow-1" type="button" id="waSendCampaignBtn">
+            <i class="bi bi-whatsapp me-1"></i> Отправить рассылку
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Результат рассылки -->
+    <div id="waResultCard" class="card p-3 d-none">
+      <div class="h6 mb-3">Результат рассылки</div>
+      <div id="waResultBody"></div>
+    </div>
+
+    <!-- Инструкция по подключению -->
+    <div class="card p-3">
+      <div class="h6 mb-2 d-flex align-items-center gap-2">
+        <i class="bi bi-info-circle" style="color:var(--mint)"></i>
+        Как подключить GreenAPI
+      </div>
+      <div class="d-flex flex-column gap-2" style="font-size:.88rem; color:var(--muted)">
+        <div class="wa-step">
+          <span class="wa-step-num">1</span>
+          Зарегистрируйтесь на <a href="https://green-api.com" target="_blank" rel="noopener">green-api.com</a>
+          (есть бесплатный тариф — 200 сообщений в сутки)
+        </div>
+        <div class="wa-step">
+          <span class="wa-step-num">2</span>
+          Создайте инстанс, получите <strong>Instance ID</strong> и <strong>API Token</strong>
+        </div>
+        <div class="wa-step">
+          <span class="wa-step-num">3</span>
+          Добавьте в файл <code>.env</code>:<br>
+          <code class="wa-code">GREENAPI_INSTANCE_ID=1234567890<br>GREENAPI_API_TOKEN=ваш_токен</code>
+        </div>
+        <div class="wa-step">
+          <span class="wa-step-num">4</span>
+          Авторизуйте WhatsApp через QR-код в личном кабинете GreenAPI
+        </div>
+        <div class="wa-step">
+          <span class="wa-step-num">5</span>
+          Перезапустите сервер — статус выше станет <strong class="text-success">Подключён</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "whatsapp";
+</script>
+{% endblock %}

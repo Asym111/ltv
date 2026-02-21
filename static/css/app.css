@@ -569,3 +569,1374 @@ button.dash-action{
     gap: 10px;
   }
 }
+/* =========================
+   SETTINGS PAGE STYLES
+   Добавить в конец app.css
+   ========================= */
+
+/* ── Layout ── */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  min-height: calc(100vh - 160px);
+}
+
+@media (max-width: 768px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Left Nav ── */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow2);
+  align-self: start;
+  position: sticky;
+  top: 20px;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: .92rem;
+  border: 1px solid transparent;
+  transition: all .15s ease;
+}
+
+.settings-nav-item i {
+  font-size: 1.05rem;
+  width: 18px;
+  text-align: center;
+}
+
+.settings-nav-item:hover {
+  background: color-mix(in srgb, var(--mint) 8%, transparent);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  background: color-mix(in srgb, var(--mint) 14%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 25%, transparent);
+  color: var(--text);
+}
+
+/* ── Right Content ── */
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Tab ── */
+.settings-tab {
+  display: none;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow2);
+  overflow: hidden;
+}
+
+.settings-tab.active {
+  display: block;
+}
+
+.settings-tab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--stroke);
+  gap: 12px;
+}
+
+.settings-tab-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: .1px;
+}
+
+.settings-tab-sub {
+  color: var(--muted);
+  font-size: .88rem;
+  margin-top: 3px;
+}
+
+/* ── Form ── */
+.settings-form {
+  padding: 20px 24px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.settings-field-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.settings-label {
+  font-weight: 800;
+  font-size: .9rem;
+  color: var(--text);
+}
+
+.settings-hint {
+  font-size: .82rem;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
+.settings-input {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .92rem;
+  font-weight: 600;
+  width: 100%;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 14%, transparent);
+}
+
+.settings-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-unit {
+  color: var(--muted);
+  font-size: .88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settings-textarea {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .9rem;
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.settings-textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 14%, transparent);
+}
+
+.settings-select-wrap {
+  position: relative;
+}
+
+.settings-select {
+  appearance: none;
+  padding: 10px 36px 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .92rem;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color .15s;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+}
+
+.settings-divider {
+  border-top: 1px solid var(--stroke);
+  margin: 20px 0;
+}
+
+/* ── Checkbox ── */
+.settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: .9rem;
+  color: var(--text);
+}
+
+.settings-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  accent-color: var(--mint);
+  cursor: pointer;
+}
+
+/* ── Toggle ── */
+.settings-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.settings-toggle-input {
+  display: none;
+}
+
+.settings-toggle-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 99px;
+  background: var(--stroke2);
+  position: relative;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+
+.settings-toggle-track::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 99px;
+  background: white;
+  top: 3px;
+  left: 3px;
+  transition: transform .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+
+.settings-toggle-input:checked + .settings-toggle-track {
+  background: var(--mint);
+}
+
+.settings-toggle-input:checked + .settings-toggle-track::after {
+  transform: translateX(20px);
+}
+
+.settings-toggle-text {
+  font-weight: 700;
+  font-size: .9rem;
+  color: var(--text);
+}
+
+/* ── Tiers table ── */
+.tiers-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+}
+
+.tiers-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tiers-table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: .82rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  border-bottom: 1px solid var(--stroke);
+}
+
+.tiers-table td {
+  padding: 12px 16px;
+  font-size: .92rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--stroke);
+  color: var(--text);
+}
+
+.tiers-table tr:last-child td {
+  border-bottom: none;
+}
+
+.tiers-table tr:hover td {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.tiers-table .tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.tier-badge.bronze { background: rgba(180,120,60,.15); color: #a06820; }
+.tier-badge.silver { background: rgba(99,102,241,.15); color: #6366f1; }
+.tier-badge.gold   { background: rgba(214,178,94,.20); color: #b8932a; }
+.tier-badge.custom { background: rgba(53,195,125,.15); color: #1a9b5c; }
+
+/* ── Bottom bar ── */
+.settings-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow2);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+/* =========================
+   ACCOUNTS PAGE STYLES
+   Добавить в конец app.css
+   ========================= */
+
+.acc-avatar-big {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 25%, transparent);
+  display: grid; place-items: center;
+  font-size: 1.4rem;
+  color: var(--mint2);
+  flex-shrink: 0;
+}
+
+.acc-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--stroke);
+  font-size: .9rem;
+}
+
+.acc-info-row:last-child {
+  border-bottom: none;
+}
+
+.acc-role-card {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  height: 100%;
+}
+
+.acc-role-name {
+  margin-bottom: 8px;
+}
+
+.acc-role-desc {
+  font-size: .82rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.acc-user-avatar {
+  width: 30px; height: 30px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  display: grid; place-items: center;
+  font-weight: 800;
+  font-size: .85rem;
+  color: var(--mint2);
+  flex-shrink: 0;
+}
+/* =========================
+   ANALYTICS PAGE STYLES
+   Добавить в конец app.css
+   ========================= */
+
+/* Period buttons */
+.btn-xs {
+  padding: 4px 10px;
+  font-size: .78rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid var(--stroke2);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-xs:hover,
+.btn-xs.active {
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 30%, transparent);
+  color: var(--text);
+}
+
+/* Alerts */
+.an-alert-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: all .15s;
+}
+.an-alert-item:hover {
+  filter: brightness(1.05);
+}
+.an-alert-item.info    { background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.18); }
+.an-alert-item.warning { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.18); }
+.an-alert-item.danger  { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.18); }
+
+.an-alert-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.an-alert-item.info    .an-alert-icon { color: #818cf8; }
+.an-alert-item.warning .an-alert-icon { color: #fbbf24; }
+.an-alert-item.danger  .an-alert-icon { color: #f87171; }
+
+.an-alert-title {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.an-alert-hint {
+  font-size: .78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.an-alert-count {
+  margin-left: auto;
+  font-weight: 900;
+  font-size: .95rem;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+/* Segments */
+.an-segment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background .12s;
+  color: var(--text);
+}
+.an-segment-row:hover {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+.an-segment-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.an-segment-info {
+  flex: 1;
+  min-width: 0;
+}
+.an-segment-name {
+  font-size: .9rem;
+  font-weight: 700;
+}
+.an-segment-hint {
+  font-size: .78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-segment-count {
+  font-weight: 900;
+  font-size: .95rem;
+  color: var(--text);
+  margin-right: 4px;
+}
+/* =========================
+   VIDEOS PAGE STYLES
+   Добавить в конец app.css
+   ========================= */
+
+.vid-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 320px;
+}
+.vid-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: .9rem;
+  pointer-events: none;
+}
+.vid-search-input {
+  width: 100%;
+  padding: 9px 14px 9px 36px;
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .9rem;
+  font-family: inherit;
+}
+.vid-search-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--mint) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 12%, transparent);
+}
+
+.vid-filter-btn {
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--stroke2);
+  background: transparent;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.vid-filter-btn:hover,
+.vid-filter-btn.active {
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 30%, transparent);
+  color: var(--text);
+}
+
+.vid-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.vid-card {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow2);
+  transition: transform .15s, box-shadow .15s;
+  display: flex;
+  flex-direction: column;
+}
+.vid-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+
+.vid-thumb-wrap {
+  position: relative;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  background: var(--panel2);
+}
+.vid-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform .3s;
+}
+.vid-card:hover .vid-thumb {
+  transform: scale(1.04);
+}
+.vid-play-btn {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,.35);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.vid-card:hover .vid-play-btn {
+  opacity: 1;
+}
+.vid-play-circle {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+  display: grid; place-items: center;
+  font-size: 1.3rem;
+  color: #111;
+}
+
+.vid-body {
+  padding: 14px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vid-category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 99px;
+  font-size: .72rem;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--mint) 14%, transparent);
+  color: var(--mint2);
+  border: 1px solid color-mix(in srgb, var(--mint) 22%, transparent);
+  width: fit-content;
+}
+.vid-title {
+  font-size: .95rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vid-desc {
+  font-size: .82rem;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vid-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+.vid-tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: .72rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--muted);
+}
+.vid-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 12px;
+  margin-top: auto;
+}
+.vid-date {
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.vid-empty {
+  grid-column: 1/-1;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+.vid-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  opacity: .4;
+}
+/* =========================
+   DESIGN STEP 7 — добавить в конец app.css
+   ========================= */
+
+/* ── KPI Cards ── */
+.kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow2);
+  padding: 16px 18px;
+  transition: transform .15s, box-shadow .15s;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.kpi-label {
+  font-size: .8rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.kpi-value {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.1;
+  margin-top: 6px;
+  letter-spacing: -.5px;
+}
+.kpi-sub {
+  font-size: .78rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Mobile header ── */
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 56px;
+  background: var(--sidebar);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  padding: 0 14px;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1000;
+}
+
+.mobile-menu-btn {
+  width: 38px; height: 38px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  color: white;
+  display: grid; place-items: center;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 999;
+  backdrop-filter: blur(2px);
+}
+
+/* ── AI Panel style ── */
+.ai-offcanvas {
+  width: min(420px, 95vw) !important;
+  background: var(--panel) !important;
+  border-left: 1px solid var(--stroke2) !important;
+}
+
+.ai-quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-quick-btn {
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--stroke2);
+  background: color-mix(in srgb, var(--mint) 8%, transparent);
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+
+.ai-quick-btn:hover {
+  background: color-mix(in srgb, var(--mint) 18%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 30%, transparent);
+}
+
+.ai-answer-card {
+  background: color-mix(in srgb, var(--mint) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.ai-answer-label {
+  font-size: .75rem;
+  font-weight: 800;
+  color: var(--mint2);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 8px;
+}
+
+.ai-answer-text {
+  font-size: .92rem;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.ai-section-label {
+  font-size: .78rem;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 8px;
+}
+
+.ai-insights-list {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-insights-list li {
+  font-size: .88rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* AI рекомендации */
+.ai-reco-card {
+  background: var(--panel);
+  border: 1px solid var(--stroke2);
+  border-radius: 14px;
+  padding: 12px 14px;
+  transition: border-color .15s;
+}
+
+.ai-reco-card:hover {
+  border-color: color-mix(in srgb, var(--mint) 35%, transparent);
+}
+
+.ai-reco-action {
+  font-size: .9rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.ai-reco-why {
+  font-size: .82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.ai-reco-target {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
+.ai-reco-target.is-action {
+  color: var(--mint2);
+}
+
+.ai-reco-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.ai-reco-bonus {
+  font-size: .78rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--gold) 15%, transparent);
+  color: var(--gold2);
+}
+
+/* ── Page load animation ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.app-content > * {
+  animation: fadeInUp .25s ease both;
+}
+
+.app-content > *:nth-child(2) { animation-delay: .04s; }
+.app-content > *:nth-child(3) { animation-delay: .08s; }
+.app-content > *:nth-child(4) { animation-delay: .12s; }
+
+/* ── Mobile responsive ── */
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr !important;
+    padding-top: 56px;
+  }
+
+  .app-sidebar {
+    position: fixed !important;
+    top: 56px;
+    left: 0;
+    height: calc(100vh - 56px) !important;
+    width: 280px;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    overflow-y: auto;
+    padding-bottom: 80px;
+  }
+
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  .app-main {
+    padding: 12px 12px 24px !important;
+  }
+
+  .app-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px !important;
+  }
+
+  .page-title { font-size: 1.1rem !important; }
+
+  .kpi-value { font-size: 1.4rem; }
+
+  /* Скрыть AI кнопку в topbar на мобилке (есть в header) */
+  #aiPanelBtn { display: none; }
+}
+
+@media (max-width: 480px) {
+  .vid-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .settings-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Scrollbar styling ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 65%, transparent);
+}
+
+/* ── Skeleton loading ── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--muted) 12%, transparent) 25%,
+    color-mix(in srgb, var(--muted) 22%, transparent) 50%,
+    color-mix(in srgb, var(--muted) 12%, transparent) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite;
+}
+/* =========================
+   WHATSAPP PAGE STYLES
+   Добавить в конец app.css
+   ========================= */
+
+.wa-preview-box {
+  background: color-mix(in srgb, var(--mint) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+  border-radius: 14px;
+  padding: 14px 16px;
+  min-height: 80px;
+  font-size: .92rem;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wa-template-item {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke2);
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--panel);
+}
+
+.wa-template-item:hover {
+  border-color: color-mix(in srgb, var(--mint) 35%, transparent);
+  background: color-mix(in srgb, var(--mint) 5%, transparent);
+}
+
+.wa-template-title {
+  font-weight: 800;
+  font-size: .88rem;
+  color: var(--text);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-template-preview {
+  font-size: .78rem;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wa-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.wa-step:last-child {
+  border-bottom: none;
+}
+
+.wa-step-num {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mint) 25%, transparent);
+  color: var(--mint2);
+  font-weight: 900;
+  font-size: .78rem;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.wa-code {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-family: monospace;
+  font-size: .82rem;
+  color: var(--text);
+  line-height: 1.8;
+}
+
+.wa-result-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  margin-bottom: 8px;
+}
+
+.wa-result-num {
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1;
+}
+/* =========================
+   DESKTOP — Лента событий + Задачи
+   Добавить в конец app.css
+   ========================= */
+
+/* ── Feed items ── */
+.feed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  transition: background .12s;
+}
+
+.feed-item:hover {
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.feed-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  font-size: .85rem;
+}
+
+.feed-icon.earn    { background: rgba(53,195,125,.15); color: var(--mint2); }
+.feed-icon.redeem  { background: rgba(245,158,11,.12); color: #f59e0b; }
+.feed-icon.alert-icon { background: rgba(239,68,68,.10); color: #ef4444; }
+.feed-icon.other   { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--muted); }
+
+.feed-body { flex: 1; min-width: 0; }
+
+.feed-title {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Task items ── */
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  transition: all .12s;
+}
+
+.task-item.done {
+  opacity: .55;
+}
+
+.task-item.done .task-text {
+  text-decoration: line-through;
+}
+
+.task-check {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: color .15s;
+}
+
+.task-check.checked { color: var(--mint); }
+.task-check:hover   { color: var(--mint2); }
+
+.task-body  { flex: 1; min-width: 0; }
+
+.task-text {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.task-meta {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.task-del {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all .12s;
+  flex-shrink: 0;
+}
+
+.task-del:hover {
+  background: rgba(239,68,68,.12);
+  color: #ef4444;
+}
+/* =========================
+   ANALYTICS — новые переключатели периода
+   Добавить в конец app.css
+   ========================= */
+
+.an-period-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.an-period-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.an-period-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.an-period-btn.active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+
+@media (max-width: 576px) {
+  .an-period-group {
+    gap: 3px;
+    padding: 3px;
+  }
+  .an-period-btn {
+    padding: 4px 8px;
+    font-size: .72rem;
+  }
+}
+/* =========================
+   SETTINGS — Boost scheduler + ROI
+   Добавить в конец app.css
+   ========================= */
+
+/* Кнопки режима */
+.boost-mode-btn {
+  padding: 7px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke2);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+
+.boost-mode-btn:hover {
+  border-color: color-mix(in srgb, var(--mint) 30%, transparent);
+  color: var(--text);
+}
+
+.boost-mode-btn.active {
+  background: color-mix(in srgb, var(--mint) 12%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 40%, transparent);
+  color: var(--mint2);
+}
+
+/* Дни недели */
+.boost-weekdays-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.boost-day-btn {
+  cursor: pointer;
+}
+
+.boost-day-btn input {
+  display: none;
+}
+
+.boost-day-btn span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke2);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+  transition: all .15s;
+  user-select: none;
+}
+
+.boost-day-btn input:checked + span {
+  background: color-mix(in srgb, var(--mint) 15%, transparent);
+  border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+  color: var(--mint2);
+}
+
+.boost-day-btn:hover span {
+  border-color: color-mix(in srgb, var(--mint) 25%, transparent);
+  color: var(--text);
+}
+
+/* Теги дат */
+.boost-date-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--mint) 30%, transparent);
+  background: color-mix(in srgb, var(--mint) 8%, transparent);
+  color: var(--text);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.boost-date-del {
+  background: none;
+  border: none;
+  padding: 0 0 0 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: .9rem;
+  line-height: 1;
+  transition: color .12s;
+}
+
+.boost-date-del:hover {
+  color: #ef4444;
+}

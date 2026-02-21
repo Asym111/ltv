@@ -2,111 +2,148 @@
 
 {% set current_page = "analytics" %}
 {% set page_title = "Аналитика" %}
-{% set page_subtitle = "Срезы 7/30/90 дней и сегменты + алерты (MVP)" %}
+{% set page_subtitle = "RFM-сегменты, выручка и динамика" %}
 
 {% block topbar_actions %}
-<button class="btn btn-sm btn-outline-secondary" id="anReloadBtn" type="button">
-  <i class="bi bi-arrow-repeat me-1"></i> Обновить
-</button>
-
-<a class="btn btn-sm btn-outline-primary" href="/admin/campaigns">
-  <i class="bi bi-megaphone me-1"></i> Кампании
-</a>
+<div class="d-flex gap-2 align-items-center">
+  <button class="btn btn-sm btn-outline-secondary" id="anReloadBtn" type="button">
+    <i class="bi bi-arrow-repeat me-1"></i> Обновить
+  </button>
+  <a class="btn btn-sm btn-success" href="/admin/campaigns">
+    <i class="bi bi-megaphone me-1"></i> Рекламные кампании
+  </a>
+</div>
 {% endblock %}
 
 {% block content %}
 
-<div class="row g-3">
+<!-- ── KPI карточки ── -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Всего клиентов</div>
+      <div class="kpi-value" id="anClientsTotal">—</div>
+      <div class="kpi-sub">в базе</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Активных</div>
+      <div class="kpi-value text-success" id="anActiveClients">—</div>
+      <div class="kpi-sub" id="anActivePeriodLabel">с покупками</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Выручка</div>
+      <div class="kpi-value" id="anRevenue30">—</div>
+      <div class="kpi-sub" id="anRevenuePeriodLabel">₸</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Средний чек</div>
+      <div class="kpi-value" id="anAvgCheck30">—</div>
+      <div class="kpi-sub" id="anAvgPeriodLabel">₸ на транзакцию</div>
+    </div>
+  </div>
+</div>
 
-  <!-- Алерты -->
-  <div class="col-12">
-    <div class="card p-3">
-      <div class="d-flex align-items-center justify-content-between">
-        <div>
-          <div class="h6 mb-0">Алерты</div>
-          <div class="text-muted small">Быстрые действия по сегментам.</div>
-        </div>
-        <div id="anMsg" class="small text-muted"></div>
-      </div>
+<!-- ── График выручки — полная ширина ── -->
+<div class="card p-3 mb-3">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <div class="h6 mb-0">Выручка по дням</div>
+      <div class="text-muted small" id="anChartSubtitle">Последние 30 дней</div>
+    </div>
 
-      <div id="anAlertsBox" class="d-flex flex-column gap-2 mt-3">
-        <div class="text-muted">Загрузка…</div>
-      </div>
+    <!-- Переключатели периода -->
+    <div class="an-period-group">
+      <button class="an-period-btn" data-period="7"  data-label="7 дней">7 дн</button>
+      <button class="an-period-btn" data-period="14" data-label="2 недели">14 дн</button>
+      <button class="an-period-btn active" data-period="30" data-label="30 дней">30 дн</button>
+      <button class="an-period-btn" data-period="60"  data-label="60 дней">60 дн</button>
+      <button class="an-period-btn" data-period="90"  data-label="90 дней">90 дн</button>
+      <button class="an-period-btn" data-period="180" data-label="6 месяцев">6 мес</button>
+      <button class="an-period-btn" data-period="365" data-label="Год">Год</button>
     </div>
   </div>
 
-  <!-- Сводка -->
-  <div class="col-12">
-    <div class="card p-3">
-      <div class="d-flex align-items-center justify-content-between">
-        <div>
-          <div class="h6 mb-0">Сводка</div>
-          <div class="text-muted small">Источник: транзакции (paid_amount) + user_phone. Срезы 7/30/90 дней.</div>
-        </div>
-        <div class="small text-muted"></div>
-      </div>
+  <div style="height:260px;position:relative">
+    <canvas id="anRevenueChart"></canvas>
+  </div>
 
-      <div class="table-responsive mt-3">
-        <table class="table table-sm align-middle">
-          <thead>
-            <tr class="text-muted">
-              <th>Период</th>
-              <th class="text-end">Выручка</th>
-              <th class="text-end">Транзакции</th>
-              <th class="text-end">Клиенты</th>
-              <th class="text-end">Средний чек</th>
-            </tr>
-          </thead>
-          <tbody id="anWindowsTbody">
-            <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
-          </tbody>
-        </table>
+  <!-- Мини-статистика под графиком -->
+  <div class="row g-2 mt-2" id="anChartStats">
+    <div class="col-4">
+      <div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.04em">Выручка за период</div>
+      <div class="fw-900" id="anPeriodRevenue" style="font-size:1.1rem">—</div>
+    </div>
+    <div class="col-4">
+      <div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.04em">Транзакций</div>
+      <div class="fw-900" id="anPeriodTx" style="font-size:1.1rem">—</div>
+    </div>
+    <div class="col-4">
+      <div class="text-muted" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.04em">Уникальных клиентов</div>
+      <div class="fw-900" id="anPeriodClients" style="font-size:1.1rem">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Сводка по периодам — полная ширина ── -->
+<div class="card p-3 mb-3">
+  <div class="h6 mb-3">Сводка по периодам</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr class="text-muted">
+          <th>Период</th>
+          <th class="text-end">Выручка</th>
+          <th class="text-end">Транзакции</th>
+          <th class="text-end">Клиенты</th>
+          <th class="text-end">Ср. чек</th>
+        </tr>
+      </thead>
+      <tbody id="anWindowsTbody">
+        <tr><td colspan="5" class="text-muted">Загрузка…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Алерты + Сегменты ── -->
+<div class="row g-3">
+
+  <!-- Алерты -->
+  <div class="col-12 col-lg-4">
+    <div class="card p-3 h-100">
+      <div class="h6 mb-3">Алерты</div>
+      <div id="anAlertsBox" class="d-flex flex-column gap-2">
+        <div class="text-muted small">Загрузка…</div>
       </div>
     </div>
   </div>
 
   <!-- Сегменты -->
-  <div class="col-12 col-lg-6">
-    <div class="card p-3">
-      <div class="h6 mb-2">Сегменты</div>
-      <div class="text-muted small mb-2">Кликабельные сегменты. Дальше — кампании и алерты по RFM.</div>
-
-      <div id="anSegmentsBox" class="d-flex flex-column gap-2">
-        <div class="text-muted">Загрузка…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI обзор -->
-  <div class="col-12 col-lg-6">
-    <div class="card p-3">
-      <div class="d-flex align-items-center justify-content-between">
+  <div class="col-12 col-lg-8">
+    <div class="card p-3 h-100">
+      <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div>
-          <div class="h6 mb-0">AI-обзор</div>
-          <div class="text-muted small">Инсайты и рекомендации (Gemini или fallback-эвристика).</div>
-        </div>
-
-        <div class="d-flex align-items-center gap-2">
-          <span id="aiModeBadge" class="badge text-bg-secondary">—</span>
-          <button class="btn btn-sm btn-outline-secondary" type="button" id="aiReloadBtn">
-            <i class="bi bi-stars me-1"></i> Обновить AI
-          </button>
+          <div class="h6 mb-0">Сегменты клиентов</div>
+          <div class="text-muted small">RFM: Recency × Frequency × Monetary</div>
         </div>
       </div>
 
-      <div id="aiError" class="text-danger small d-none mt-2"></div>
-
-      <div class="mt-3">
-        <div class="text-muted small mb-1">Инсайты</div>
-        <ul id="aiInsights" class="mb-0">
-          <li class="text-muted">Загрузка…</li>
-        </ul>
-      </div>
-
-      <div class="mt-3">
-        <div class="text-muted small mb-1">Рекомендации</div>
-        <div id="aiRecos" class="d-flex flex-column gap-2">
-          <div class="text-muted small">Загрузка…</div>
+      <div class="row g-3">
+        <div class="col-12 col-md-5">
+          <div style="height:200px;position:relative">
+            <canvas id="anSegmentChart"></canvas>
+          </div>
+        </div>
+        <div class="col-12 col-md-7">
+          <div id="anSegmentsBox" class="d-flex flex-column gap-1">
+            <div class="text-muted small">Загрузка…</div>
+          </div>
         </div>
       </div>
     </div>
@@ -117,6 +154,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
   window.__ADMIN_PAGE__ = "analytics";
 </script>

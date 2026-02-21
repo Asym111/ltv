@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<div class="d-flex gap-2">
+  {% set role = current_user.role if current_user else '' %}
+  {% if role in ['owner', 'admin'] %}
+  <button class="btn btn-sm btn-success" type="button" id="vidOpenAddBtn">
+    <i class="bi bi-plus-circle me-1"></i> Добавить видео
+  </button>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Форма добавления -->
+{% set role = current_user.role if current_user else '' %}
+{% if role in ['owner', 'admin'] %}
+<div id="vidAddBox" class="card p-3 mb-3 d-none" style="border-color: var(--mint) !important;">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="fw-semibold">Добавить видео</div>
+    <button class="btn btn-sm btn-outline-secondary" type="button" id="vidCloseAddBtn">✕</button>
+  </div>
+  <div id="vidAddErr" class="text-danger small d-none mb-2"></div>
+  <div class="row g-2">
+    <div class="col-12 col-md-6">
+      <label class="settings-label">YouTube ссылка *</label>
+      <input id="vidNewUrl" type="text" class="settings-input mt-1"
+             placeholder="https://www.youtube.com/watch?v=...">
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="settings-label">Название *</label>
+      <input id="vidNewTitle" type="text" class="settings-input mt-1"
+             placeholder="Как увеличить LTV клиентов">
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="settings-label">Категория</label>
+      <select id="vidNewCategory" class="settings-select mt-1">
+        <option value="general">Общее</option>
+        <option value="loyalty">Лояльность</option>
+        <option value="marketing">Маркетинг</option>
+        <option value="analytics">Аналитика</option>
+        <option value="crm">CRM</option>
+        <option value="campaigns">Кампании</option>
+        <option value="settings">Настройки</option>
+        <option value="other">Другое</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="settings-label">Теги (через запятую)</label>
+      <input id="vidNewTags" type="text" class="settings-input mt-1"
+             placeholder="retention, rfm, бонусы">
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="settings-label">Описание</label>
+      <input id="vidNewDesc" type="text" class="settings-input mt-1"
+             placeholder="Краткое описание (необязательно)">
+    </div>
+    <div class="col-12 d-flex justify-content-end gap-2">
+      <button class="btn btn-sm btn-outline-secondary" type="button" id="vidCancelAddBtn">Отмена</button>
+      <button class="btn btn-sm btn-success" type="button" id="vidAddBtn">
+        <i class="bi bi-plus-circle me-1"></i> Добавить
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Фильтры -->
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <div class="vid-search-wrap">
+    <i class="bi bi-search vid-search-icon"></i>
+    <input id="vidSearchInput" type="text" class="vid-search-input" placeholder="Поиск по названию или тегам…">
+  </div>
+  <div class="d-flex gap-2 flex-wrap" id="vidCategoryFilters">
+    <button class="vid-filter-btn active" data-cat="">Все</button>
+    <button class="vid-filter-btn" data-cat="loyalty">Лояльность</button>
+    <button class="vid-filter-btn" data-cat="marketing">Маркетинг</button>
+    <button class="vid-filter-btn" data-cat="analytics">Аналитика</button>
+    <button class="vid-filter-btn" data-cat="crm">CRM</button>
+    <button class="vid-filter-btn" data-cat="campaigns">Кампании</button>
+    <button class="vid-filter-btn" data-cat="settings">Настройки</button>
+    <button class="vid-filter-btn" data-cat="other">Другое</button>
+  </div>
+  <span class="text-muted small ms-auto" id="vidCount"></span>
+</div>
+
+<!-- Сетка видео -->
+<div id="vidGrid" class="vid-grid">
+  <div class="text-muted">Загрузка…</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "videos";
+</script>
+{% endblock %}

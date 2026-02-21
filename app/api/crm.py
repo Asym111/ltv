@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 
 from app.core.database import get_db
 from app.models.user import User
@@ -34,11 +34,34 @@ def get_client_metrics(phone: str, db: Session = Depends(get_db)) -> ClientMetri
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
+    paid = func.coalesce(Transaction.paid_amount, 0)
+    refunded = func.coalesce(Transaction.refunded_amount, 0)
+    net_paid = (paid - refunded)
+
+    # total_spent = сумма net_paid (но не ниже 0 на уровне строки)
+    total_spent_expr = func.coalesce(
+        func.sum(
+            case(
+                (net_paid > 0, net_paid),
+                else_=0,
+            )
+        ),
+        0,
+    )
+
+    # purchases_count = число транзакций, где net_paid > 0
+    purchases_count_expr = func.coalesce(
+        func.sum(
+            case(
+                (net_paid > 0, 1),
+                else_=0,
+            )
+        ),
+        0,
+    )
+
     total_spent, purchases_count = (
-        db.query(
-            func.coalesce(func.sum(Transaction.paid_amount), 0),
-            func.count(Transaction.id),
-        )
+        db.query(total_spent_expr, purchases_count_expr)
         .filter(Transaction.user_id == user.id)
         .first()
     )

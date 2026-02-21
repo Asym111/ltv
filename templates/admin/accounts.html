@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block topbar_actions %}
+<div class="d-flex gap-2 align-items-center">
+  {% set role = current_user.role if current_user else '' %}
+  {% if role in ['owner', 'admin'] %}
+  <button class="btn btn-sm btn-success" type="button" id="accOpenCreateBtn">
+    <i class="bi bi-person-plus me-1"></i> Добавить сотрудника
+  </button>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- Профиль компании -->
+  <div class="col-12 col-lg-4">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="acc-avatar-big">
+          <i class="bi bi-building"></i>
+        </div>
+        <div>
+          <div class="fw-black" id="accTenantName" style="font-size:1.1rem">—</div>
+          <div class="text-muted small" id="accTenantAccess">—</div>
+        </div>
+      </div>
+
+      {% set role = current_user.role if current_user else '' %}
+      {% if role in ['owner', 'admin'] %}
+      <div class="mb-3">
+        <label class="settings-label">Название компании</label>
+        <div class="d-flex gap-2 mt-1">
+          <input id="accTenantNameInput" type="text" class="settings-input" placeholder="Название бизнеса">
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="accSaveNameBtn">
+            <i class="bi bi-check2"></i>
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <hr class="my-2">
+
+      <div class="acc-info-row">
+        <span class="text-muted">Ваше имя</span>
+        <span class="fw-semibold">{{ current_user.name if current_user else '—' }}</span>
+      </div>
+      <div class="acc-info-row">
+        <span class="text-muted">Телефон</span>
+        <span class="fw-semibold">{{ current_user.phone if current_user else '—' }}</span>
+      </div>
+      <div class="acc-info-row">
+        <span class="text-muted">Роль</span>
+        <span class="badge text-bg-secondary" id="accMyRole">{{ current_user.role|upper if current_user else '—' }}</span>
+      </div>
+    </div>
+
+    <!-- Смена пароля -->
+    <div class="card p-3 mt-3">
+      <div class="h6 mb-3">Смена пароля</div>
+      <div class="d-flex flex-column gap-2">
+        <div>
+          <label class="settings-label">Текущий пароль</label>
+          <input id="accOldPwd" type="password" class="settings-input mt-1" placeholder="••••••••">
+        </div>
+        <div>
+          <label class="settings-label">Новый пароль</label>
+          <input id="accNewPwd" type="password" class="settings-input mt-1" placeholder="••••••••">
+        </div>
+        <div>
+          <label class="settings-label">Повторите новый</label>
+          <input id="accNewPwd2" type="password" class="settings-input mt-1" placeholder="••••••••">
+        </div>
+        <div id="accPwdMsg" class="small d-none"></div>
+        <button class="btn btn-sm btn-outline-secondary mt-1" type="button" id="accChangePwdBtn">
+          <i class="bi bi-key me-1"></i> Изменить пароль
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Команда -->
+  <div class="col-12 col-lg-8">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <div class="h6 mb-0">Команда</div>
+          <div class="text-muted small">Сотрудники, имеющие доступ к панели</div>
+        </div>
+        <span class="badge text-bg-secondary" id="accUsersCount">—</span>
+      </div>
+
+      <!-- Форма создания -->
+      <div id="accCreateBox" class="card p-3 mb-3 d-none" style="border-color: var(--mint) !important;">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="fw-semibold">Новый сотрудник</div>
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="accCloseCreateBtn">✕</button>
+        </div>
+        <div id="accCreateErr" class="text-danger small d-none mb-2"></div>
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <label class="settings-label">Имя</label>
+            <input id="accNewName" type="text" class="settings-input mt-1" placeholder="Айгерим">
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="settings-label">Телефон</label>
+            <input id="accNewPhone" type="text" class="settings-input mt-1" placeholder="77001234567">
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="settings-label">Пароль</label>
+            <input id="accNewPwdCreate" type="password" class="settings-input mt-1" placeholder="минимум 4 символа">
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="settings-label">Роль</label>
+            <select id="accNewRole" class="settings-select mt-1">
+              <option value="staff">Staff — кассир/продавец</option>
+              <option value="admin">Admin — менеджер</option>
+              {% if current_user and current_user.role == 'owner' %}
+              <option value="owner">Owner — владелец</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="col-12 d-flex justify-content-end">
+            <button class="btn btn-sm btn-success" type="button" id="accCreateBtn">
+              <i class="bi bi-check2-circle me-1"></i> Создать
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Таблица -->
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>Имя</th>
+              <th>Телефон</th>
+              <th>Роль</th>
+              <th>Статус</th>
+              <th>Последний вход</th>
+              <th class="text-end">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="accUsersTbody">
+            <tr><td colspan="6" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="accUsersErr" class="text-danger small d-none mt-2"></div>
+    </div>
+
+    <!-- Легенда ролей -->
+    <div class="card p-3 mt-3">
+      <div class="h6 mb-2">Роли и права доступа</div>
+      <div class="row g-2">
+        <div class="col-12 col-md-4">
+          <div class="acc-role-card">
+            <div class="acc-role-name">
+              <span class="badge text-bg-warning text-dark">OWNER</span>
+            </div>
+            <div class="acc-role-desc">Полный доступ. Управление командой, настройки, все данные.</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="acc-role-card">
+            <div class="acc-role-name">
+              <span class="badge text-bg-primary">ADMIN</span>
+            </div>
+            <div class="acc-role-desc">Транзакции, клиенты, аналитика, кампании. Без смены настроек владельца.</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="acc-role-card">
+            <div class="acc-role-name">
+              <span class="badge text-bg-secondary">STAFF</span>
+            </div>
+            <div class="acc-role-desc">Только транзакции и просмотр клиентов. Без аналитики и настроек.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.__ADMIN_PAGE__ = "accounts";
+</script>
+{% endblock %}

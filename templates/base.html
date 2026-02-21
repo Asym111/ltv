@@ -1,3 +1,4 @@
+{# This is a Jinja2 template #}
 <!doctype html>
 <html lang="ru">
 <head>
@@ -8,207 +9,263 @@
     {% if page_title %}{{ page_title }} — LTV Admin{% else %}LTV Admin{% endif %}
   </title>
 
-  <!-- Bootstrap -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-
-  <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-
-  <!-- Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- ✅ Cache-busting -->
   {% set _v = static_v|default('1') %}
   <link href="/static/css/app.css?v={{ _v }}" rel="stylesheet"/>
 </head>
 
-<body class="page-{{ current_page|default('') }}">
-  <div class="app-shell">
-    <!-- Sidebar -->
-    <aside class="app-sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-badge">L</div>
-        <div class="brand-text">
-          <div class="brand-name">LTV</div>
-          <div class="brand-sub">Loyalty Platform</div>
+<body class="page-{{ current_page|default('') }}"
+      data-user-role="{{ current_user.role if current_user else 'staff' }}"
+      data-user-phone="{{ current_user.phone if current_user else '' }}"
+      data-user-name="{{ current_user.name if current_user else '' }}">
+<div class="app-shell">
+
+  <!-- ── Mobile header ── -->
+  <header class="mobile-header">
+    <div class="mobile-brand">
+      <div class="brand-badge" style="width:32px;height:32px;font-size:.9rem;">L</div>
+      <span class="brand-name" style="font-size:1rem;">LTV</span>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <button class="btn btn-outline-primary btn-sm" type="button"
+              data-bs-toggle="offcanvas" data-bs-target="#aiPanel">
+        <i class="bi bi-stars"></i>
+      </button>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Меню">
+        <i class="bi bi-list"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Overlay для мобильного меню ── -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ── Sidebar ── -->
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="sidebar-brand">
+      <div class="brand-badge">L</div>
+      <div class="brand-text">
+        <div class="brand-name">LTV</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Меню</div>
+
+      <a class="nav-item {% if current_page=='desktop' %}active{% endif %}" href="/admin">
+        <i class="bi bi-grid-1x2"></i>
+        <span>Рабочий стол</span>
+      </a>
+
+      <a class="nav-item {% if current_page=='transactions' %}active{% endif %}" href="/admin/transactions">
+        <i class="bi bi-receipt"></i>
+        <span>Транзакции</span>
+      </a>
+
+      {% if current_user and current_user.role in ('owner', 'admin') %}
+      <a class="nav-item {% if current_page=='analytics' %}active{% endif %}" href="/admin/analytics">
+        <i class="bi bi-bar-chart"></i>
+        <span>Аналитика</span>
+      </a>
+      {% endif %}
+
+      <a class="nav-item {% if current_page=='clients' or current_page=='clients_db' %}active{% endif %}" href="/admin/clients">
+        <i class="bi bi-people"></i>
+        <span>Клиенты</span>
+      </a>
+
+      {% if current_user and current_user.role in ('owner', 'admin') %}
+      <a class="nav-item {% if current_page=='campaigns' %}active{% endif %}" href="/admin/campaigns">
+        <i class="bi bi-megaphone"></i>
+        <span>Рекламные кампании</span>
+      </a>
+      {% endif %}
+
+      {% if current_user and current_user.role in ('owner', 'admin') %}
+      <a class="nav-item {% if current_page=='whatsapp' %}active{% endif %}" href="/admin/whatsapp">
+        <i class="bi bi-whatsapp"></i>
+        <span>WhatsApp</span>
+      </a>
+      {% endif %}
+
+      <a class="nav-item {% if current_page=='videos' %}active{% endif %}" href="/admin/videos">
+        <i class="bi bi-play-circle"></i>
+        <span>База знаний</span>
+      </a>
+
+      {% if current_user and current_user.role == 'owner' %}
+      <a class="nav-item {% if current_page=='settings' %}active{% endif %}" href="/admin/settings">
+        <i class="bi bi-sliders"></i>
+        <span>Настройки</span>
+      </a>
+      {% endif %}
+
+      {% if current_user and current_user.role == 'owner' %}
+      <a class="nav-item {% if current_page=='accounts' %}active{% endif %}" href="/admin/accounts">
+        <i class="bi bi-shield-lock"></i>
+        <span>Аккаунт</span>
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="sidebar-footer">
+      {% set u = current_user %}
+      {% set uname = (u.name if u and u.name else (u.phone if u and u.phone else "Admin")) %}
+      {% set urole = (u.role if u and u.role else "owner") %}
+      <div class="sidebar-user">
+        <div class="user-avatar">{{ uname[:1]|upper }}</div>
+        <div class="user-meta">
+          <div class="user-name">{{ uname }}</div>
+          <div class="user-role">{{ urole|upper }}</div>
         </div>
       </div>
+      <a class="btn btn-sm btn-outline-light w-100 mt-2" href="/logout">
+        <i class="bi bi-box-arrow-right me-1"></i> Выйти
+      </a>
+    </div>
+  </aside>
 
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Меню</div>
-
-        <a class="nav-item {% if current_page=='desktop' %}active{% endif %}" href="/admin">
-          <i class="bi bi-grid-1x2"></i>
-          <span>Рабочий стол</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='news' %}active{% endif %}" href="/admin/news">
-          <i class="bi bi-megaphone"></i>
-          <span>Новости</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='transactions' %}active{% endif %}" href="/admin/transactions">
-          <i class="bi bi-receipt"></i>
-          <span>Транзакции</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='whatsapp' %}active{% endif %}" href="/admin/whatsapp">
-          <i class="bi bi-whatsapp"></i>
-          <span>WhatsApp</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='analytics' %}active{% endif %}" href="/admin/analytics">
-          <i class="bi bi-bar-chart"></i>
-          <span>Аналитика</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='clients' %}active{% endif %}" href="/admin/clients">
-          <i class="bi bi-people"></i>
-          <span>Клиенты</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='settings' %}active{% endif %}" href="/admin/settings">
-          <i class="bi bi-sliders"></i>
-          <span>Настройки</span>
-        </a>
-
-        <a class="nav-item {% if current_page=='clients_db' %}active{% endif %}" href="/admin/clients-db">
-          <i class="bi bi-database"></i>
-          <span>База клиентов</span>
-        </a>
+  <!-- ── Main ── -->
+  <main class="app-main">
+    <div class="app-topbar">
+      <div class="topbar-left">
+        <div class="page-title">{{ page_title if page_title else "Dashboard" }}</div>
+        <div class="page-subtitle">{{ page_subtitle if page_subtitle else "" }}</div>
       </div>
 
-      <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="user-avatar">A</div>
-          <div class="user-meta">
-            <div class="user-name">Admin</div>
-            <div class="user-role">Owner</div>
-          </div>
-        </div>
-        <button class="btn btn-sm btn-outline-light w-100 mt-2" type="button"
-                onclick="uiToast('Пока без авторизации', 'info')">
-          <i class="bi bi-box-arrow-right me-1"></i> Выйти
+      <div class="topbar-right d-flex align-items-center gap-2 flex-wrap">
+        {% block topbar_actions %}{% endblock %}
+
+        <button class="btn btn-outline-primary btn-sm" type="button" id="aiPanelBtn"
+                data-bs-toggle="offcanvas" data-bs-target="#aiPanel"
+                title="AI помощник">
+          <i class="bi bi-stars me-1"></i> AI
+        </button>
+
+        <button id="themeToggle" class="btn btn-outline-secondary btn-sm"
+                type="button" title="Сменить тему">
+          <span id="themeIcon">🌙</span>
         </button>
       </div>
-    </aside>
+    </div>
 
-    <!-- Main -->
-    <main class="app-main">
-      <div class="app-topbar">
-        <div class="topbar-left">
-          <div class="page-title">{{ page_title if page_title else "Dashboard" }}</div>
-          <div class="page-subtitle">{{ page_subtitle if page_subtitle else "" }}</div>
-        </div>
+    <div class="app-content">
+      {% block content %}{% endblock %}
+    </div>
 
-        <div class="topbar-right d-flex align-items-center gap-2 flex-wrap">
-          {% block topbar_actions %}{% endblock %}
-
-          <button class="btn btn-outline-primary btn-sm" type="button" id="aiPanelBtn"
-                  data-bs-toggle="offcanvas" data-bs-target="#aiPanel" aria-controls="aiPanel"
-                  title="AI помощник">
-            <i class="bi bi-stars me-1"></i> AI
-          </button>
-
-          <button id="themeToggle" class="btn btn-outline-secondary btn-sm" type="button" title="Сменить тему">
-            <span id="themeIcon">🌙</span>
-          </button>
+    <!-- Toast -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+      <div id="uiToast" class="toast align-items-center text-bg-dark border-0"
+           role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+          <div class="toast-body" id="uiToastBody">...</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                  data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
       </div>
+    </div>
 
-      <div class="app-content">
-        {% block content %}{% endblock %}
-      </div>
-
-      <!-- Toast container -->
-      <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
-        <div id="uiToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
-          <div class="d-flex">
-            <div class="toast-body" id="uiToastBody">...</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    <!-- AI Panel offcanvas -->
+    <div class="offcanvas offcanvas-end ai-offcanvas" tabindex="-1"
+         id="aiPanel" aria-labelledby="aiPanelLabel">
+      <div class="offcanvas-header">
+        <div>
+          <div class="fw-bold d-flex align-items-center gap-2" id="aiPanelLabel">
+            <i class="bi bi-stars" style="color:var(--mint)"></i>
+            AI помощник
           </div>
+          <div class="text-muted small" id="aiPanelContext">Контекст: бизнес</div>
         </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
       </div>
 
-      <!-- ✅ Global AI Panel -->
-      <div class="offcanvas offcanvas-end" tabindex="-1" id="aiPanel" aria-labelledby="aiPanelLabel">
-        <div class="offcanvas-header">
-          <div>
-            <div class="fw-bold" id="aiPanelLabel">AI помощник</div>
-            <div class="text-muted small" id="aiPanelContext">Контекст: —</div>
-          </div>
-          <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      <div class="offcanvas-body d-flex flex-column gap-3">
+
+        <!-- Быстрые вопросы -->
+        <div class="ai-quick-btns">
+          <button class="ai-quick-btn" data-q="Что делать сегодня для роста LTV?">📈 LTV</button>
+          <button class="ai-quick-btn" data-q="Кто в зоне риска оттока?">⚠️ Риск</button>
+          <button class="ai-quick-btn" data-q="Какую кампанию запустить сейчас?">🎯 Кампания</button>
+          <button class="ai-quick-btn" data-q="Дай обзор бизнеса">📊 Обзор</button>
         </div>
 
-        <div class="offcanvas-body">
-          <label class="form-label small text-muted mb-1">Вопрос</label>
-          <textarea id="aiPanelQuestion" class="form-control" rows="4" placeholder="Например: что делать сегодня, чтобы увеличить повторные покупки?"></textarea>
-
+        <!-- Вопрос -->
+        <div>
+          <label class="settings-label mb-1">Вопрос</label>
+          <textarea id="aiPanelQuestion" class="settings-textarea" rows="3"
+                    placeholder="Например: что делать сегодня, чтобы увеличить повторные покупки?"></textarea>
           <div class="d-flex align-items-center gap-2 mt-2">
-            <button class="btn btn-sm btn-primary" type="button" id="aiPanelSendBtn">
+            <button class="btn btn-sm btn-success flex-grow-1" type="button" id="aiPanelSendBtn">
               <i class="bi bi-send me-1"></i> Спросить
             </button>
-            <button class="btn btn-sm btn-outline-secondary" type="button" id="aiPanelClearBtn">Очистить</button>
-            <span id="aiPanelMode" class="badge text-bg-secondary ms-auto">—</span>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="aiPanelClearBtn">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+            <span id="aiPanelMode" class="badge text-bg-secondary">—</span>
           </div>
+          <div id="aiPanelError" class="text-danger small d-none mt-1"></div>
+        </div>
 
-          <div id="aiPanelError" class="text-danger small d-none mt-2"></div>
-
-          <div class="mt-3">
-            <div class="fw-semibold">Ответ</div>
-            <div id="aiPanelAnswer" class="mt-1 text-body">—</div>
-          </div>
-
-          <div class="mt-3">
-            <div class="text-muted small mb-1">Инсайты</div>
-            <ul id="aiPanelInsights" class="mb-0">
-              <li class="text-muted">—</li>
-            </ul>
+        <!-- Ответ -->
+        <div id="aiAnswerBlock" class="d-none">
+          <div class="ai-answer-card">
+            <div class="ai-answer-label">Ответ</div>
+            <div id="aiPanelAnswer" class="ai-answer-text">—</div>
           </div>
 
           <div class="mt-3">
-            <div class="text-muted small mb-1">Рекомендации</div>
-            <div id="aiPanelRecos" class="d-flex flex-column gap-2">
-              <div class="text-muted small">—</div>
-            </div>
+            <div class="ai-section-label">Инсайты</div>
+            <ul id="aiPanelInsights" class="ai-insights-list mb-0"></ul>
           </div>
 
-          <div class="text-muted small mt-3">
-            Подсказка: на карточке клиента AI автоматически работает в контексте клиента (телефон подтянется).
+          <div class="mt-3">
+            <div class="ai-section-label">Рекомендации</div>
+            <div id="aiPanelRecos" class="d-flex flex-column gap-2"></div>
           </div>
         </div>
+
+        <div class="text-muted small mt-auto">
+          <i class="bi bi-info-circle me-1"></i>
+          На карточке клиента AI автоматически работает в контексте клиента.
+        </div>
       </div>
+    </div>
+  </main>
+</div>
 
-    </main>
-  </div>
+<script>
+  function uiToast(message, kind="success") {
+    const toastEl = document.getElementById("uiToast");
+    const bodyEl  = document.getElementById("uiToastBody");
+    if (!toastEl || !bodyEl) { alert(message); return; }
+    bodyEl.textContent = message;
+    toastEl.classList.remove("text-bg-success","text-bg-danger","text-bg-warning","text-bg-info","text-bg-dark");
+    if (kind === "success")     toastEl.classList.add("text-bg-success");
+    else if (kind === "error")  toastEl.classList.add("text-bg-danger");
+    else if (kind === "warning")toastEl.classList.add("text-bg-warning");
+    else if (kind === "info")   toastEl.classList.add("text-bg-info");
+    else                        toastEl.classList.add("text-bg-dark");
+    if (!window.bootstrap?.Toast) { toastEl.classList.remove("d-none"); return; }
+    bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+  }
+</script>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- ✅ Cache-busting -->
-  <script src="/static/js/admin.js?v={{ _v }}"></script>
-
-  <script>
-    function uiToast(message, kind="success") {
-      const toastEl = document.getElementById("uiToast");
-      const bodyEl = document.getElementById("uiToastBody");
-      if (!toastEl || !bodyEl) return;
-
-      bodyEl.textContent = message;
-
-      toastEl.classList.remove("text-bg-success","text-bg-danger","text-bg-warning","text-bg-info","text-bg-dark");
-      if (kind === "success") toastEl.classList.add("text-bg-success");
-      else if (kind === "error") toastEl.classList.add("text-bg-danger");
-      else if (kind === "warning") toastEl.classList.add("text-bg-warning");
-      else if (kind === "info") toastEl.classList.add("text-bg-info");
-      else toastEl.classList.add("text-bg-dark");
-
-      const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 });
-      t.show();
-    }
-  </script>
-
-  {% block scripts %}{% endblock %}
+<script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"
+        onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js';document.head.appendChild(s);">
+</script>
+<script>
+  // Читаем контекст пользователя из data-атрибутов <body>
+  var _b = document.body.dataset;
+  window.__USER_ROLE__  = _b.userRole  || "staff";
+  window.__USER_PHONE__ = _b.userPhone || "";
+  window.__USER_NAME__  = _b.userName  || "";
+</script>
+<script src="/static/js/admin.js?v={{ _v }}"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

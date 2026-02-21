@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% set current_page = "campaigns" %}
-{% set page_title = "Кампании" %}
-{% set page_subtitle = "Создать кампанию по сегменту и собрать список клиентов" %}
+{% set page_title = "Рекламные кампании" %}
+{% set page_subtitle = "Создавайте кампании по сегментам и собирайте аудиторию" %}
 
 {% block topbar_actions %}
 <a class="btn btn-sm btn-outline-secondary" href="/admin/analytics">
@@ -22,8 +22,8 @@
     <div class="card p-3">
       <div class="d-flex align-items-center justify-content-between">
         <div>
-          <div class="h6 mb-0">Список кампаний</div>
-          <div class="text-muted small">Draft → Build → Ready (пока без рассылок).</div>
+          <div class="h6 mb-0">Список рекламных кампаний</div>
+          <div class="text-muted small">Draft → Build → Ready → Рассылка через WhatsApp</div>
         </div>
         <div id="cpMsg" class="small text-muted"></div>
       </div>
@@ -54,7 +54,7 @@
   <div class="col-12">
     <div id="cpCreateBox" class="card p-3 d-none">
       <div class="d-flex align-items-center justify-content-between">
-        <div class="h6 mb-0">Новая кампания</div>
+        <div class="h6 mb-0">Новая рекламная кампания</div>
         <button class="btn btn-sm btn-outline-secondary" type="button" id="cpCloseCreateBtn">Закрыть</button>
       </div>
 

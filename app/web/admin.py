@@ -8,10 +8,10 @@ templates = Jinja2Templates(directory="templates")
 
 
 def render(request: Request, tpl: str, **ctx):
-    return templates.TemplateResponse(tpl, {"request": request, **ctx})
+    current_user = getattr(request.state, "user", None)
+    return templates.TemplateResponse(tpl, {"request": request, "current_user": current_user, **ctx})
 
 
-# ✅ Главная админки = Рабочий стол
 @router.get("/admin", response_class=HTMLResponse)
 @router.get("/admin/", response_class=HTMLResponse, include_in_schema=False)
 def admin_desktop(request: Request):
@@ -24,7 +24,6 @@ def admin_desktop(request: Request):
     )
 
 
-# ✅ Новости отдельной страницей (бывшая главная)
 @router.get("/admin/news", response_class=HTMLResponse)
 @router.get("/admin/news/", response_class=HTMLResponse, include_in_schema=False)
 def admin_news(request: Request):
@@ -37,7 +36,6 @@ def admin_news(request: Request):
     )
 
 
-# Клиенты
 @router.get("/admin/clients", response_class=HTMLResponse)
 @router.get("/admin/clients/", response_class=HTMLResponse, include_in_schema=False)
 def admin_clients(request: Request):
@@ -50,7 +48,6 @@ def admin_clients(request: Request):
     )
 
 
-# Карточка клиента
 @router.get("/admin/client/{phone}", response_class=HTMLResponse)
 @router.get("/admin/client/{phone}/", response_class=HTMLResponse, include_in_schema=False)
 def admin_client_card(request: Request, phone: str):
@@ -64,7 +61,6 @@ def admin_client_card(request: Request, phone: str):
     )
 
 
-# Транзакции
 @router.get("/admin/transactions", response_class=HTMLResponse)
 @router.get("/admin/transactions/", response_class=HTMLResponse, include_in_schema=False)
 def admin_transactions(request: Request):
@@ -77,7 +73,6 @@ def admin_transactions(request: Request):
     )
 
 
-# Настройки
 @router.get("/admin/settings", response_class=HTMLResponse)
 @router.get("/admin/settings/", response_class=HTMLResponse, include_in_schema=False)
 def admin_settings(request: Request):
@@ -90,7 +85,6 @@ def admin_settings(request: Request):
     )
 
 
-# База клиентов (временно)
 @router.get("/admin/clients-db", response_class=HTMLResponse)
 @router.get("/admin/clients-db/", response_class=HTMLResponse, include_in_schema=False)
 def admin_clients_db(request: Request):
@@ -108,14 +102,13 @@ def admin_clients_db(request: Request):
 def admin_whatsapp(request: Request):
     return render(
         request,
-        "admin/placeholder.html",
+        "admin/whatsapp.html",
         current_page="whatsapp",
         page_title="WhatsApp",
-        page_subtitle="Модуль в разработке",
+        page_subtitle="Рассылки и сообщения клиентам через GreenAPI",
     )
 
 
-# ✅ Аналитика
 @router.get("/admin/analytics", response_class=HTMLResponse)
 @router.get("/admin/analytics/", response_class=HTMLResponse, include_in_schema=False)
 def admin_analytics(request: Request):
@@ -128,7 +121,6 @@ def admin_analytics(request: Request):
     )
 
 
-# ✅ Список клиентов сегмента
 @router.get("/admin/analytics/segment/{key}", response_class=HTMLResponse)
 @router.get("/admin/analytics/segment/{key}/", response_class=HTMLResponse, include_in_schema=False)
 def admin_analytics_segment(request: Request, key: str):

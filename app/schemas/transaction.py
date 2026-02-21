@@ -11,36 +11,32 @@ PaymentMethod = Literal["CASH", "CARD", "TRANSFER", "OTHER", "MIXED"]
 
 
 class TransactionCreate(BaseModel):
-    """
-    Создание транзакции.
-    Важно: поддерживаем автосоздание клиента (full_name, birth_date, tier).
-    """
     model_config = ConfigDict(extra="forbid")
 
     user_phone: str = Field(..., min_length=5, max_length=32)
 
-    amount: int = Field(..., gt=0, description="Сумма чека (в KZT, целое)")
-    paid_amount: Optional[int] = Field(
-        default=None,
-        ge=0,
-        description="Фактически оплачено. Если None — посчитаем автоматически."
-    )
+    amount: int = Field(..., gt=0, description="Сумма чека (KZT, целое)")
 
-    redeem_points: int = Field(default=0, ge=0, description="Списать бонусов (поинты)")
+    # ✅ В UI поле «Оплачено» убираем, но API оставим совместимым
+    paid_amount: Optional[int] = Field(default=None, ge=0)
+
+    redeem_points: int = Field(default=0, ge=0, description="Списать бонусов")
 
     payment_method: PaymentMethod = Field(default="CASH")
     comment: str = Field(default="", max_length=255)
 
-    # Поля для автосоздания клиента (если клиента нет)
     full_name: Optional[str] = Field(default=None, max_length=120)
     birth_date: Optional[date] = None
     tier: Optional[Tier] = Field(default=None)
-    earn_rate: Optional[float] = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Кастомный earn rate. Если None — по tier."
-    )
+
+
+class TransactionRefund(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Если full_refund=True — amount игнорируем
+    amount: Optional[int] = Field(default=None, ge=1, description="Сумма возврата (KZT)")
+    full_refund: bool = False
+    comment: str = Field(default="", max_length=255)
 
 
 class TransactionOut(BaseModel):
@@ -57,5 +53,9 @@ class TransactionOut(BaseModel):
 
     payment_method: str
     comment: str
+
+    status: str
+    refunded_amount: int
+    refunded_at: Optional[datetime] = None
 
     created_at: datetime

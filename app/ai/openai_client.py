@@ -78,7 +78,7 @@ async def openai_generate_json(
     *,
     api_key: str | None,
     model: str | None,
-    timeout_s: int = 30,
+    timeout_s: int = 40,
 ) -> dict[str, Any]:
     key = (api_key or "").strip()
     if not key:
@@ -91,14 +91,14 @@ async def openai_generate_json(
         timeout=httpx.Timeout(timeout_s),
     )
 
-    # Responses API + JSON Schema (строгое структурирование)
-    # см. official docs: responses.create + text.format json_schema :contentReference[oaicite:1]{index=1}
+    # Сначала пробуем Responses API с JSON Schema (структурированный вывод)
+    _responses_err: str | None = None
     try:
         resp = await client.responses.create(
             model=m,
             input=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user",   "content": user_prompt},
             ],
             text={
                 "format": {
@@ -109,23 +109,52 @@ async def openai_generate_json(
                 }
             },
             temperature=0.25,
-            max_output_tokens=900,
+            max_output_tokens=2000,  # было 900 — AI обрезал длинные аналитические ответы
         )
+        text = (getattr(resp, "output_text", None) or "").strip()
+        if text:
+            json_text = _extract_json_text(text)
+            try:
+                obj = json.loads(json_text)
+                if isinstance(obj, dict):
+                    return obj
+            except Exception as e:
+                raise OpenAIError(f"Responses API JSON parse error: {e}")
+    except OpenAIError:
+        raise
     except Exception as e:
-        raise OpenAIError(str(e))
+        # Responses API недоступна (старая версия SDK, модель не поддерживает) —
+        # fallback на стандартный chat.completions
+        _responses_err = str(e)
 
-    text = (getattr(resp, "output_text", None) or "").strip()
-    if not text:
-        raise OpenAIError("OpenAI returned empty output_text")
-
-    # Обычно тут уже чистый JSON, но оставим защиту
-    json_text = _extract_json_text(text)
+    # Fallback: chat.completions (работает со всеми версиями SDK и моделями)
     try:
+        chat_resp = await client.chat.completions.create(
+            model=m,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.25,
+            max_tokens=2000,
+            response_format={"type": "json_object"},
+        )
+        text = (chat_resp.choices[0].message.content or "").strip()
+        if not text:
+            raise OpenAIError(
+                f"chat.completions returned empty"
+                + (f" (responses err: {_responses_err})" if _responses_err else "")
+            )
+        json_text = _extract_json_text(text)
         obj = json.loads(json_text)
-    except Exception as e:
-        raise OpenAIError(f"OpenAI returned non-JSON: {e}")
-
-    if not isinstance(obj, dict):
-        raise OpenAIError("OpenAI JSON root must be an object")
-
-    return obj
+        if not isinstance(obj, dict):
+            raise OpenAIError("chat.completions JSON root must be object")
+        return obj
+    except OpenAIError:
+        raise
+    except Exception as e2:
+        raise OpenAIError(
+            f"Both APIs failed."
+            + (f" Responses: {_responses_err}." if _responses_err else "")
+            + f" Chat: {e2}"
+        )

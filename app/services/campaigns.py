@@ -1,6 +1,7 @@
 # app/services/campaigns.py
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -8,6 +9,18 @@ from sqlalchemy import desc
 
 from app.models.campaign import Campaign, CampaignRecipient
 from app.services.analytics import list_clients_by_segment
+
+
+def _parse_dt(v) -> datetime | None:
+    """Строку ISO → datetime. Если уже datetime — возвращает как есть."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    try:
+        return datetime.fromisoformat(str(v))
+    except Exception:
+        return None
 
 
 def list_campaigns(db: Session) -> List[Campaign]:
@@ -43,7 +56,7 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
     if not c:
         raise ValueError("Campaign not found")
 
-    # берём ВСЕХ клиентов сегмента по фильтрам (большой лимит — внутренний вызов)
+    # Берём всех клиентов сегмента по фильтрам
     res = list_clients_by_segment(
         db,
         key=c.segment_key,
@@ -57,10 +70,12 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
     )
     items = res.get("items") or []
 
-    # очистка старого снапшота
-    db.query(CampaignRecipient).filter(CampaignRecipient.campaign_id == c.id).delete(synchronize_session=False)
+    # Очистка старого снапшота
+    db.query(CampaignRecipient).filter(
+        CampaignRecipient.campaign_id == c.id
+    ).delete(synchronize_session=False)
 
-    # вставка
+    # Вставка с конвертацией last_purchase_at строки → datetime
     for it in items:
         r = CampaignRecipient(
             campaign_id=c.id,
@@ -68,7 +83,7 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
             full_name=it.get("full_name"),
             tier=str(it.get("tier") or "Bronze"),
 
-            last_purchase_at=it.get("last_purchase_at"),
+            last_purchase_at=_parse_dt(it.get("last_purchase_at")),  # ← фикс
             recency_days=int(it.get("recency_days") or 0),
 
             purchases_90d=int(it.get("purchases_90d") or 0),
@@ -93,11 +108,19 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
     return c
 
 
-def list_recipients(db: Session, campaign_id: int, limit: int = 200, offset: int = 0) -> List[CampaignRecipient]:
+def list_recipients(
+    db: Session,
+    campaign_id: int,
+    limit: int = 200,
+    offset: int = 0,
+) -> List[CampaignRecipient]:
     return (
         db.query(CampaignRecipient)
         .filter(CampaignRecipient.campaign_id == campaign_id)
-        .order_by(desc(CampaignRecipient.revenue_90d), desc(CampaignRecipient.purchases_90d))
+        .order_by(
+            desc(CampaignRecipient.revenue_90d),
+            desc(CampaignRecipient.purchases_90d),
+        )
         .offset(offset)
         .limit(limit)
         .all()

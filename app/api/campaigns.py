@@ -35,6 +35,7 @@ def campaigns_get(campaign_id: int, db: Session = Depends(get_db)) -> CampaignDe
             phone=r.phone,
             full_name=r.full_name,
             tier=r.tier,
+            bonus_balance=getattr(r, 'bonus_balance', 0) or 0,
             last_purchase_at=r.last_purchase_at,
             recency_days=r.recency_days,
             purchases_90d=r.purchases_90d,
@@ -82,6 +83,7 @@ def campaigns_recipients(
             phone=r.phone,
             full_name=r.full_name,
             tier=r.tier,
+            bonus_balance=getattr(r, 'bonus_balance', 0) or 0,
             last_purchase_at=r.last_purchase_at,
             recency_days=r.recency_days,
             purchases_90d=r.purchases_90d,
@@ -95,4 +97,3 @@ def campaigns_recipients(
         )
         for r in rows
     ]
-

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Superadmin — Вход</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --border: #1e1e2e;
+      --accent: #00ff88;
+      --accent2: #7c3aed;
+      --text: #e2e2f0;
+      --muted: #555570;
+      --danger: #ff4466;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(124,58,237,.08) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(0,255,136,.05) 0%, transparent 50%);
+    }
+
+    .login-box {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px; height: 56px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 14px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      color: #fff;
+      margin-bottom: 1rem;
+    }
+    .brand-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.3rem;
+      letter-spacing: .05em;
+      color: var(--text);
+    }
+    .brand-sub {
+      font-size: .7rem;
+      color: var(--muted);
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      margin-top: .3rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+    }
+
+    .error-msg {
+      background: rgba(255,68,102,.1);
+      border: 1px solid rgba(255,68,102,.3);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      color: var(--danger);
+      font-size: .8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+    label {
+      display: block;
+      font-size: .7rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .5rem;
+    }
+    input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: .85rem;
+      background: linear-gradient(135deg, var(--accent2), #5b21b6);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .95rem;
+      letter-spacing: .05em;
+      cursor: pointer;
+      margin-top: .5rem;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn-login:hover { opacity: .9; }
+    .btn-login:active { transform: scale(.99); }
+
+    .hint {
+      text-align: center;
+      font-size: .7rem;
+      color: var(--muted);
+      margin-top: 1.5rem;
+    }
+    .hint code {
+      color: var(--accent);
+      background: rgba(0,255,136,.08);
+      padding: .1em .4em;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="brand">
+      <div class="brand-badge">SA</div>
+      <div class="brand-title">LTV Superadmin</div>
+      <div class="brand-sub">Панель управления платформой</div>
+    </div>
+
+    <div class="card">
+      {% if error %}
+        <div class="error-msg">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/superadmin/login">
+        <div class="form-group">
+          <label>Логин</label>
+          <input type="text" name="login" placeholder="superadmin" autocomplete="off" required autofocus/>
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" name="password" placeholder="••••••••••" required/>
+        </div>
+        <button class="btn-login" type="submit">Войти →</button>
+      </form>
+    </div>
+
+    <div class="hint">
+      Настрой в <code>.env</code>: <code>SUPERADMIN_LOGIN</code> и <code>SUPERADMIN_PASSWORD</code>
+    </div>
+  </div>
+</body>
+</html>
