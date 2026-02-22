@@ -40,10 +40,10 @@ def get_or_create_settings(db: Session) -> Settings:
         boost_mode="days",
         cost_per_lead=0,
         cost_per_client=0,
-        tiers_json=json.dumps([
+        tiers_json=[
             {"name": "Silver", "spend_from": 300000, "bonus_percent": 5},
             {"name": "Gold",   "spend_from": 1000000, "bonus_percent": 7},
-        ], ensure_ascii=False),
+        ],
     )
     db.add(row)
     db.commit()
@@ -70,8 +70,7 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> S
     row.earn_gold_percent   = payload.earn_gold_percent
 
     row.welcome_bonus_percent = payload.welcome_bonus_percent
-
-    row.redeem_max_percent = payload.redeem_max_percent
+    row.redeem_max_percent    = payload.redeem_max_percent
 
     row.activation_days = payload.activation_days
     row.burn_days       = payload.burn_days
@@ -87,29 +86,20 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> S
     row.birthday_message_7d = payload.birthday_message_7d
     row.birthday_enabled    = payload.birthday_enabled
 
-    row.boost_enabled   = payload.boost_enabled
-    row.boost_percent   = payload.boost_percent
-    row.boost_always    = payload.boost_always
+    row.boost_enabled = payload.boost_enabled
+    row.boost_percent = payload.boost_percent
+    row.boost_always  = payload.boost_always
+    row.boost_mode    = payload.boost_mode or "days"
 
-    # Новые поля расписания буста
-    if hasattr(payload, 'boost_mode') and payload.boost_mode is not None:
-        row.boost_mode = payload.boost_mode
-    if hasattr(payload, 'boost_weekdays') and payload.boost_weekdays is not None:
-        row.boost_weekdays = json.dumps(payload.boost_weekdays, ensure_ascii=False)
-    if hasattr(payload, 'boost_dates') and payload.boost_dates is not None:
-        row.boost_dates = json.dumps(payload.boost_dates, ensure_ascii=False)
+    # JSONB колонки — передаём list напрямую, БЕЗ json.dumps
+    row.boost_weekdays = payload.boost_weekdays
+    row.boost_dates    = payload.boost_dates
 
-    # ROI поля
-    if hasattr(payload, 'cost_per_lead') and payload.cost_per_lead is not None:
-        row.cost_per_lead = payload.cost_per_lead
-    if hasattr(payload, 'cost_per_client') and payload.cost_per_client is not None:
-        row.cost_per_client = payload.cost_per_client
+    row.cost_per_lead   = payload.cost_per_lead
+    row.cost_per_client = payload.cost_per_client
 
-    # Тиры → JSON
-    row.tiers_json = json.dumps(
-        [t.model_dump() for t in payload.tiers],
-        ensure_ascii=False,
-    )
+    # JSONB колонка — передаём list напрямую, БЕЗ json.dumps
+    row.tiers_json = [t.model_dump() for t in payload.tiers]
 
     db.commit()
     db.refresh(row)
