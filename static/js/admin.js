@@ -2559,7 +2559,7 @@ function initSettingsPage() {
   // ── Load ──────────────────────────────────────────
   async function load() {
     try {
-      const data = await apiGet("/api/settings_api/");
+      const data = await apiGet("/api/settings/");
       fillForm(data);
     } catch (e) {
       uiToast(`Ошибка загрузки: ${e.message}`, "error");
