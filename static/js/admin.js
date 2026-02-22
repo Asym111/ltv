@@ -1633,6 +1633,15 @@ function initAnalyticsPage() {
 // =========================
 // Page: Campaigns (/admin/campaigns)
 // =========================
+
+// Global helper — используется в campaigns и campaign_detail
+function badgeStatus(s) {
+  const st = String(s || "draft");
+  if (st === "ready") return "text-bg-success";
+  if (st === "sent") return "text-bg-secondary";
+  return "text-bg-warning text-dark";
+}
+
 function initCampaignsPage() {
   const tbody = document.getElementById("cpTbody");
   if (!tbody) return;
@@ -1669,13 +1678,6 @@ function initCampaignsPage() {
   function hideErr() {
     if (!errEl) return;
     errEl.classList.add("d-none");
-  }
-
-  function badgeStatus(s) {
-    const st = String(s || "draft");
-    if (st === "ready") return "text-bg-success";
-    if (st === "sent") return "text-bg-secondary";
-    return "text-bg-warning text-dark";
   }
 
   function row(c) {
@@ -1838,57 +1840,6 @@ function initCampaignDetailPage() {
     errEl.classList.add("d-none");
   }
 
-// =========================
-// ПАТЧ admin.js — переименование кампаний
-// Заменить строки в admin.js глобальным поиском
-// =========================
-//
-// 1. В initCampaignsPage() строки:
-//    "Кампаний пока нет"     → "Рекламных кампаний пока нет"
-//    "Кампаний: "            → "Рекламных кампаний: "
-//    "Кампания создана"      → "Рекламная кампания создана"
-//    "Ошибка создания кампании" → "Ошибка создания рекламной кампании"
-//    "Укажи название кампании"  → "Укажи название рекламной кампании"
-//
-// 2. В initDesktopPage() строки:
-//    "Кампаний пока нет"     → "Рекламных кампаний пока нет"
-//    `Кампания #${id}`       → `Рекламная кампания #${id}`
-//
-// 3. В formatTarget() / AI строки:
-//    "🎯 Открыть кампании"   → "🎯 Рекламные кампании"
-//    "➕ Создать кампанию"   → "➕ Создать рекламную кампанию"
-//
-// =========================
-// ГОТОВЫЙ JS для замены функции row() в initCampaignsPage
-// (находить по "function row(c) {" — около строки 1331)
-// =========================
-
-function row(c) {
-  const id = c?.id ?? "—";
-  const name = c?.name || "—";
-  const seg = c?.segment_key || "—";
-  const bonus = safeNum(c?.suggested_bonus ?? 0, 0);
-  const st = c?.status || "draft";
-  const total = safeNum(c?.recipients_total ?? 0, 0);
-  const created = fmtDate(c?.created_at);
-
-  const statusLabels = { draft: "Черновик", ready: "Готова", sent: "Отправлена", building: "Сборка" };
-
-  return `
-    <tr>
-      <td>${id}</td>
-      <td>${String(name)}</td>
-      <td><span class="badge text-bg-secondary">${String(seg)}</span></td>
-      <td class="text-end">${fmtMoney(bonus)}</td>
-      <td><span class="badge ${badgeStatus(st)}">${statusLabels[st] || st}</span></td>
-      <td class="text-end">${fmt0(total)}</td>
-      <td class="text-muted">${created}</td>
-      <td class="text-end">
-        <a class="btn btn-sm btn-outline-primary" href="/admin/campaigns/${id}">Открыть</a>
-      </td>
-    </tr>
-  `;
-}
 
   async function load() {
     hideErr();
