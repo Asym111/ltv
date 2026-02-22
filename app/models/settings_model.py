@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import Column, Integer, DateTime, String, Boolean, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
 
 
@@ -9,7 +10,7 @@ class Settings(Base):
 
     id = Column(Integer, primary_key=True)
 
-    # --- Название бонусов (кастомное) ---
+    # --- Название бонусов ---
     bonus_name = Column(String(40), default="баллы", nullable=False)
 
     # --- Earn (%) по тирам ---
@@ -18,22 +19,22 @@ class Settings(Base):
     earn_gold_percent   = Column(Integer, default=7, nullable=False)
 
     # --- Приветственный бонус ---
-    welcome_bonus_percent = Column(Integer, default=0, nullable=False)  # % от первой покупки (0 = выкл)
+    welcome_bonus_percent = Column(Integer, default=0, nullable=False)
 
-    # --- Redeem (списание) ---
-    redeem_max_percent = Column(Integer, default=30, nullable=False)  # 0–100
+    # --- Redeem ---
+    redeem_max_percent = Column(Integer, default=30, nullable=False)
 
     # --- Активация ---
-    activation_days = Column(Integer, default=0, nullable=False)   # 0 = сразу
+    activation_days = Column(Integer, default=0, nullable=False)
 
     # --- Сгорание ---
-    burn_days = Column(Integer, default=180, nullable=False)
-    burn_percent = Column(Integer, default=100, nullable=False)     # % сгорания (100 = всё)
+    burn_days    = Column(Integer, default=180, nullable=False)
+    burn_percent = Column(Integer, default=100, nullable=False)
 
     # --- День рождения ---
-    birthday_bonus_amount   = Column(Integer, default=5000, nullable=False)
+    birthday_bonus_amount      = Column(Integer, default=5000, nullable=False)
     birthday_bonus_days_before = Column(Integer, default=7, nullable=False)
-    birthday_bonus_ttl_days = Column(Integer, default=30, nullable=False)
+    birthday_bonus_ttl_days    = Column(Integer, default=30, nullable=False)
     birthday_notify_7d  = Column(Boolean, default=True, nullable=False)
     birthday_notify_3d  = Column(Boolean, default=True, nullable=False)
     birthday_notify_1d  = Column(Boolean, default=True, nullable=False)
@@ -41,21 +42,21 @@ class Settings(Base):
     birthday_message_7d = Column(Text, nullable=True)
     birthday_enabled    = Column(Boolean, default=True, nullable=False)
 
-    # --- Тиры (динамические, JSON-список) ---
-    # Хранится как JSON строка: [{"name":"Silver","spend_from":300000,"bonus_percent":5}, ...]
-    # Bronze — всегда базовый (earn_bronze_percent), тиры выше задаются здесь
-    tiers_json = Column(Text, nullable=True)   # JSON
+    # --- Тиры — JSONB ---
+    tiers_json = Column(JSONB, nullable=True)
 
-    # --- Накопительный (повышенный) бонус ---
-    boost_enabled     = Column(Boolean, default=False, nullable=False)
-    boost_percent     = Column(Integer, default=7, nullable=False)
-    boost_always      = Column(Boolean, default=False, nullable=False)
-    boost_time_from   = Column(String(5), nullable=True)   # "HH:MM"
-    boost_time_to     = Column(String(5), nullable=True)
-    boost_mode        = Column(String(10), default="days", nullable=False)
-    boost_weekdays    = Column(Text, nullable=True)
-    boost_dates       = Column(Text, nullable=True)
-    cost_per_lead     = Column(Integer, default=0, nullable=False)
-    cost_per_client   = Column(Integer, default=0, nullable=False)
+    # --- Повышенный бонус ---
+    boost_enabled   = Column(Boolean, default=False, nullable=False)
+    boost_percent   = Column(Integer, default=7, nullable=False)
+    boost_always    = Column(Boolean, default=False, nullable=False)
+    boost_time_from = Column(String(5), nullable=True)
+    boost_time_to   = Column(String(5), nullable=True)
+    boost_mode      = Column(String(10), default="days", nullable=False)
+    boost_weekdays  = Column(JSONB, nullable=True)   # было Text
+    boost_dates     = Column(JSONB, nullable=True)   # было Text
+
+    # --- ROI ---
+    cost_per_lead   = Column(Integer, default=0, nullable=False)
+    cost_per_client = Column(Integer, default=0, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
