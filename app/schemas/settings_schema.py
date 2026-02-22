@@ -97,7 +97,7 @@ class SettingsUpdate(BaseModel):
     redeem_max_percent: int = Field(default=30, ge=0, le=100)
     activation_days: int = Field(default=0, ge=0, le=365)
     burn_days:       int = Field(default=180, ge=1, le=3650)
-    burn_percent:    int = Field(default=100, ge=1, le=100)
+    burn_percent:    int = Field(default=100, ge=0, le=100)
     birthday_bonus_amount:      int  = Field(default=5000, ge=0)
     birthday_bonus_days_before: int  = Field(default=7, ge=0, le=30)
     birthday_bonus_ttl_days:    int  = Field(default=30, ge=1, le=365)
@@ -110,7 +110,7 @@ class SettingsUpdate(BaseModel):
     boost_enabled:  bool = False
     boost_percent:  int  = Field(default=7, ge=0, le=100)
     boost_always:   bool = False
-    boost_mode:     str  = Field(default="days", pattern="^(days|dates)$")
+    boost_mode:     str  = Field(default="days")
     boost_weekdays: list[str] = []
     boost_dates:    list[str] = []
     cost_per_lead:   int = Field(default=0, ge=0)
