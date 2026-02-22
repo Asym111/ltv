@@ -13,7 +13,7 @@ class TierItem(BaseModel):
 
 
 class SettingsOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    model_config = ConfigDict(from_attributes=True, extra="ignore", populate_by_name=True)
 
     id: int = 1
     bonus_name: str = "баллы"
@@ -44,6 +44,25 @@ class SettingsOut(BaseModel):
     cost_per_client: int = 0
     tiers: list[TierItem] = []
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, data):
+        # Конвертируем ORM объект в dict
+        if hasattr(data, "__tablename__"):
+            # Это SQLAlchemy ORM объект
+            d = {}
+            for col in data.__table__.columns:
+                d[col.name] = getattr(data, col.name, None)
+            # tiers_json -> tiers
+            if "tiers_json" in d:
+                d["tiers"] = d.pop("tiers_json") or "[]"
+            return d
+        # Обычный dict — просто маппим tiers_json если есть
+        if isinstance(data, dict) and "tiers_json" in data:
+            data = dict(data)
+            data["tiers"] = data.pop("tiers_json") or "[]"
+        return data
+
     @field_validator("boost_weekdays", "boost_dates", mode="before")
     @classmethod
     def parse_json_list(cls, v):
@@ -65,22 +84,6 @@ class SettingsOut(BaseModel):
             except Exception:
                 return []
         return v or []
-
-    @model_validator(mode="before")
-    @classmethod
-    def map_tiers_json(cls, data):
-        """Маппим tiers_json → tiers если приходит из ORM модели."""
-        if hasattr(data, "__dict__"):
-            # ORM объект
-            d = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
-            if "tiers_json" in d and "tiers" not in d:
-                d["tiers"] = d.pop("tiers_json") or "[]"
-            elif "tiers_json" in d:
-                d["tiers"] = d.pop("tiers_json") or "[]"
-            return d
-        if isinstance(data, dict) and "tiers_json" in data and "tiers" not in data:
-            data["tiers"] = data.pop("tiers_json") or "[]"
-        return data
 
 
 class SettingsUpdate(BaseModel):
