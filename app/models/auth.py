@@ -15,9 +15,8 @@ class Tenant(Base):
 
     # ✅ Дата окончания доступа (подписка). None = бессрочно.
     access_until = Column(DateTime, nullable=True)
-
+    plan = Column(String(32), default="trial", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
     users = relationship("AuthUser", back_populates="tenant")
 
 
