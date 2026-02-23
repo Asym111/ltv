@@ -12,7 +12,11 @@ templates = Jinja2Templates(directory="templates")
 def admin_videos(request: Request):
     current_user = getattr(request.state, "user", None)
     # Передаём флаг суперадмина в шаблон
-    is_superadmin = request.session.get("_sa_authed") is True
+    # Суперадмин без импersonации — только тогда показываем кнопку
+is_superadmin = (
+    request.session.get("_sa_authed") is True and
+    not request.session.get("_sa_impersonating")
+)
     return templates.TemplateResponse("admin/videos.html", {
         "request": request,
         "current_user": current_user,
