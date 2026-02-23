@@ -14,8 +14,7 @@
 {% block content %}
 
 <!-- Форма добавления -->
-{% set role = current_user.role if current_user else '' %}
-{% if role in ['owner', 'admin'] %}
+{% if is_superadmin %}
 <div id="vidAddBox" class="card p-3 mb-3 d-none" style="border-color: var(--mint) !important;">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div class="fw-semibold">Добавить видео</div>

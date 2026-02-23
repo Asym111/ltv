@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field, ConfigDict
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -51,18 +52,18 @@ CATEGORY_LABELS = {
 class VideoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id:          int
-    title:       str
-    description: Optional[str]
-    youtube_url: str
-    youtube_id:  str
-    thumbnail:   str
-    category:    str
+    id:             int
+    title:          str
+    description:    Optional[str]
+    youtube_url:    str
+    youtube_id:     str
+    thumbnail:      str
+    category:       str
     category_label: str
-    tags:        Optional[str]
-    is_active:   bool
-    sort_order:  int
-    created_at:  datetime
+    tags:           Optional[str]
+    is_active:      bool
+    sort_order:     int
+    created_at:     datetime
 
     @classmethod
     def from_orm_ext(cls, v: VideoResource) -> "VideoOut":
@@ -83,19 +84,19 @@ class VideoOut(BaseModel):
 
 
 class VideoCreate(BaseModel):
-    title:       str  = Field(..., min_length=1, max_length=200)
-    youtube_url: str  = Field(..., min_length=10, max_length=500)
+    title:       str           = Field(..., min_length=1, max_length=200)
+    youtube_url: str           = Field(..., min_length=10, max_length=500)
     description: Optional[str] = Field(default=None, max_length=1000)
-    category:    str  = Field(default="general")
+    category:    str           = Field(default="general")
     tags:        Optional[str] = Field(default=None, max_length=300)
-    sort_order:  int  = Field(default=0, ge=0)
+    sort_order:  int           = Field(default=0, ge=0)
 
 
 class VideoUpdate(BaseModel):
-    title:       Optional[str] = Field(default=None, min_length=1, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=1000)
-    category:    Optional[str] = None
-    tags:        Optional[str] = Field(default=None, max_length=300)
+    title:       Optional[str]  = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str]  = Field(default=None, max_length=1000)
+    category:    Optional[str]  = None
+    tags:        Optional[str]  = Field(default=None, max_length=300)
     is_active:   Optional[bool] = None
     sort_order:  Optional[int]  = Field(default=None, ge=0)
 
@@ -106,6 +107,10 @@ def get_tenant_id(request: Request) -> int | None:
     tid = u.get("tenant_id")
     return int(tid) if tid else None
 
+def is_superadmin(request: Request) -> bool:
+    """Проверяем суперадмин сессию."""
+    return request.session.get("_sa_authed") is True
+
 
 # ── Endpoints ──────────────────────────────────────────────
 @router.get("/", response_model=List[VideoOut])
@@ -115,16 +120,10 @@ def list_videos(
     q: Optional[str] = Query(default=None, max_length=80),
     db: Session = Depends(get_db),
 ) -> List[VideoOut]:
-    tenant_id = get_tenant_id(request)
-
-    # Глобальные (tenant_id=None) + свои
-    from sqlalchemy import or_
+    # Показываем глобальные видео (tenant_id=None) всем тенантам
     qr = db.query(VideoResource).filter(
         VideoResource.is_active == True,
-        or_(
-            VideoResource.tenant_id == None,
-            VideoResource.tenant_id == tenant_id,
-        )
+        VideoResource.tenant_id == None,  # только глобальные (от суперадмина)
     )
 
     if category:
@@ -132,7 +131,6 @@ def list_videos(
 
     if q:
         q_low = f"%{q.lower()}%"
-        from sqlalchemy import func
         qr = qr.filter(
             VideoResource.title.ilike(q_low) |
             VideoResource.tags.ilike(q_low)
@@ -148,20 +146,18 @@ def create_video(
     request: Request,
     db: Session = Depends(get_db),
 ) -> VideoOut:
-    u = getattr(request.state, "user", None) or {}
-    role = u.get("role", "")
-    if role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only owner/admin can add videos")
+    # Только суперадмин может добавлять видео
+    if not is_superadmin(request):
+        raise HTTPException(status_code=403, detail="Only superadmin can add videos")
 
     yt_id = extract_youtube_id(payload.youtube_url)
     if not yt_id:
         raise HTTPException(status_code=400, detail="Не удалось извлечь YouTube ID из ссылки")
 
     category = payload.category if payload.category in CATEGORIES else "general"
-    tenant_id = get_tenant_id(request)
 
     v = VideoResource(
-        tenant_id=tenant_id,
+        tenant_id=None,  # глобальное видео — видно всем тенантам
         title=payload.title.strip(),
         description=(payload.description or "").strip() or None,
         youtube_url=payload.youtube_url.strip(),
@@ -170,7 +166,7 @@ def create_video(
         tags=payload.tags,
         sort_order=payload.sort_order,
         is_active=True,
-        added_by=u.get("id"),
+        added_by=None,
     )
     db.add(v)
     db.commit()
@@ -185,9 +181,8 @@ def update_video(
     request: Request,
     db: Session = Depends(get_db),
 ) -> VideoOut:
-    u = getattr(request.state, "user", None) or {}
-    if u.get("role") not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only owner/admin can edit videos")
+    if not is_superadmin(request):
+        raise HTTPException(status_code=403, detail="Only superadmin can edit videos")
 
     v = db.query(VideoResource).filter(VideoResource.id == video_id).first()
     if not v:
@@ -211,9 +206,8 @@ def delete_video(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    u = getattr(request.state, "user", None) or {}
-    if u.get("role") not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only owner/admin can delete videos")
+    if not is_superadmin(request):
+        raise HTTPException(status_code=403, detail="Only superadmin can delete videos")
 
     v = db.query(VideoResource).filter(VideoResource.id == video_id).first()
     if not v:
