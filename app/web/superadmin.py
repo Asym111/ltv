@@ -202,6 +202,7 @@ def sa_create_tenant(
     owner_name: str = Form("Owner"),
     grant_days: int = Form(30),
     plan: str = Form("trial"),
+    subscription_amount: int = Form(0),
 ):
     redir = _require_auth(request)
     if redir:
@@ -214,6 +215,7 @@ def sa_create_tenant(
             is_active=True,
             access_until=None,
             plan=plan,
+            subscription_amount=subscription_amount,
         )
         if grant_days > 0:
             t.access_until = datetime.utcnow() + timedelta(days=grant_days)
