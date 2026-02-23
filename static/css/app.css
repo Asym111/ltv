@@ -1940,3 +1940,92 @@ button.dash-action{
 .boost-date-del:hover {
   color: #ef4444;
 }
+/* =========================================================
+   Dark theme fixes — добавить в конец static/css/app.css
+   ========================================================= */
+
+/* Таблицы Bootstrap — принудительный тёмный фон */
+.table {
+  color: var(--text) !important;
+  --bs-table-bg: transparent !important;
+  --bs-table-striped-bg: transparent !important;
+  --bs-table-hover-bg: transparent !important;
+  --bs-table-border-color: var(--stroke) !important;
+  --bs-table-color: var(--text) !important;
+}
+.table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: var(--text) !important;
+  border-color: var(--stroke) !important;
+}
+.table thead th {
+  color: var(--muted) !important;
+  font-weight: 700;
+  background: transparent !important;
+  border-bottom: 1px solid var(--stroke2) !important;
+}
+.table tbody tr {
+  background: transparent !important;
+}
+.table tbody tr:hover > * {
+  background: color-mix(in srgb, var(--panel) 80%, transparent) !important;
+  color: var(--text) !important;
+}
+
+/* Input, select в тёмной теме */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--stroke2) !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--muted) !important;
+}
+
+/* Bootstrap форм контролы */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+  background-color: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--stroke2) !important;
+}
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+  background-color: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--mint) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--mint) 20%, transparent) !important;
+}
+
+/* Card в тёмной теме */
+[data-theme="dark"] .card {
+  background: var(--panel) !important;
+  border-color: var(--stroke) !important;
+  color: var(--text) !important;
+}
+
+/* Modal */
+[data-theme="dark"] .modal-content {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--stroke) !important;
+}
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+  border-color: var(--stroke) !important;
+}
+
+/* Dropdown */
+[data-theme="dark"] .dropdown-menu {
+  background: var(--panel) !important;
+  border-color: var(--stroke) !important;
+}
+[data-theme="dark"] .dropdown-item {
+  color: var(--text) !important;
+}
+[data-theme="dark"] .dropdown-item:hover {
+  background: color-mix(in srgb, var(--mint) 12%, transparent) !important;
+}

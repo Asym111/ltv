@@ -14,6 +14,7 @@ from jinja2 import TemplateNotFound
 from app.core.database import SessionLocal
 from app.core.security import normalize_phone, verify_password
 from app.models.auth import AuthUser, Tenant
+from app.models.auth import Tenant as TenantModel
 
 router = APIRouter()
 
@@ -132,6 +133,8 @@ def login_post(
         request.session["name"]      = user.name
         request.session["role"]      = user.role
         request.session["tenant_id"] = user.tenant_id
+        tenant = db.query(TenantModel).filter(TenantModel.id == user.tenant_id).first()
+        request.session["tenant_name"] = tenant.name if tenant else ""
 
         # Безопасный редирект — только внутренние пути
         safe_next = next if (next and next.startswith("/") and not next.startswith("//")) else "/admin"

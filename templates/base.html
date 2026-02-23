@@ -117,7 +117,7 @@
 
     <div class="sidebar-footer">
       {% set u = current_user %}
-      {% set uname = (u.name if u and u.name else (u.phone if u and u.phone else "Admin")) %}
+      {% set uname = (u.tenant_name if u and u.tenant_name else (u.name if u and u.name else (u.phone if u and u.phone else "Admin"))) %}
       {% set urole = (u.role if u and u.role else "owner") %}
       <div class="sidebar-user">
         <div class="user-avatar">{{ uname[:1]|upper }}</div>
