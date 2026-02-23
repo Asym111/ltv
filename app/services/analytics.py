@@ -1,15 +1,22 @@
 # app/services/analytics.py
 from __future__ import annotations
-from datetime import datetime, timedelta
+
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
 from app.models.transaction import Transaction
 from app.models.user import User
 
+# UTC+5 Алматы
+ALMATY = timezone(timedelta(hours=5))
+
 
 def _utcnow() -> datetime:
-    return datetime.utcnow()
+    """Текущее время по Алматы (UTC+5), без tzinfo для совместимости с БД."""
+    return datetime.now(ALMATY).replace(tzinfo=None)
 
 
 def _window_stats(db: Session, since: datetime, now: datetime, tenant_id: int) -> Dict[str, Any]:
@@ -155,15 +162,12 @@ def build_analytics_overview(db: Session, tenant_id: int) -> Dict[str, Any]:
     ]
 
     alerts = []
-    risk_count = segment_counts.get("risk", 0)
-    lost_count = segment_counts.get("lost", 0)
-    new_count  = segment_counts.get("new",  0)
-    if risk_count > 0:
-        alerts.append({"key": "risk", "title": f"{risk_count} клиентов в зоне риска оттока", "level": "warning", "count": risk_count, "hint": "Не покупали 30-60 дней.", "href": "/admin/analytics/segment/risk"})
-    if lost_count > 0:
-        alerts.append({"key": "lost", "title": f"{lost_count} потерянных клиентов", "level": "danger", "count": lost_count, "hint": "Не покупали более 60 дней.", "href": "/admin/analytics/segment/lost"})
-    if new_count > 0:
-        alerts.append({"key": "new", "title": f"{new_count} новых клиентов", "level": "info", "count": new_count, "hint": "Только одна покупка — важно удержать.", "href": "/admin/analytics/segment/new"})
+    if segment_counts.get("risk", 0) > 0:
+        alerts.append({"key": "risk", "title": f"{segment_counts['risk']} клиентов в зоне риска", "level": "warning", "count": segment_counts["risk"], "hint": "Не покупали 30-60 дней.", "href": "/admin/analytics/segment/risk"})
+    if segment_counts.get("lost", 0) > 0:
+        alerts.append({"key": "lost", "title": f"{segment_counts['lost']} потерянных клиентов", "level": "danger", "count": segment_counts["lost"], "hint": "Не покупали более 60 дней.", "href": "/admin/analytics/segment/lost"})
+    if segment_counts.get("new", 0) > 0:
+        alerts.append({"key": "new", "title": f"{segment_counts['new']} новых клиентов", "level": "info", "count": segment_counts["new"], "hint": "Только одна покупка — важно удержать.", "href": "/admin/analytics/segment/new"})
 
     return {
         "generated_at":  now.isoformat(),
@@ -216,7 +220,6 @@ def list_clients_by_segment(
     )
     total_map = {r.uid: (int(r.total_freq), int(r.total_rev)) for r in total_rows}
     users_map = {u.id: u for u in db.query(User).filter(User.tenant_id == tenant_id).all()}
-
     freq_map_90 = {r.uid: r for r in freq_rows}
     uid_set = set(users_map.keys()) if key == "all" else set(freq_map_90.keys())
 

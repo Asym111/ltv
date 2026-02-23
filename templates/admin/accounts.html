@@ -22,8 +22,10 @@
           <i class="bi bi-building"></i>
         </div>
         <div>
-          <div class="fw-black" id="accTenantName" style="font-size:1.1rem">—</div>
-          <div class="text-muted small" id="accTenantAccess">—</div>
+          <div class="fw-black" id="accTenantName" style="font-size:1.1rem">{{ tenant_name or '—' }}</div>
+          <div class="text-muted small" id="accTenantAccess">
+          {% if tenant_access %}Доступ до: {{ tenant_access.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+          </div>
         </div>
       </div>
 
