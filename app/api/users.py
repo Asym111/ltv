@@ -1,8 +1,6 @@
 from __future__ import annotations
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut, UserUpdate
@@ -25,23 +23,32 @@ def normalize_phone(raw: str) -> str:
     return digits
 
 
+def must_tenant_id(request: Request) -> int:
+    u = getattr(request.state, "user", None) or {}
+    tid = u.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(tid)
+
+
 @router.get("/", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db)) -> list[UserOut]:
-    users = db.query(User).order_by(User.id.desc()).all()
+def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]:
+    tenant_id = must_tenant_id(request)
+    users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.id.desc()).all()
     return [UserOut.model_validate(u) for u in users]
 
 
 @router.post("", response_model=UserOut)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserOut:
+def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db)) -> UserOut:
+    tenant_id = must_tenant_id(request)
     phone = normalize_phone(payload.phone)
     if not phone:
         raise HTTPException(status_code=400, detail="Invalid phone")
-
-    exists = db.query(User).filter(User.phone == phone).first()
+    exists = db.query(User).filter(User.tenant_id == tenant_id, User.phone == phone).first()
     if exists:
         raise HTTPException(status_code=400, detail="Phone already exists")
-
     user = User(
+        tenant_id=tenant_id,
         phone=phone,
         full_name=payload.full_name,
         birth_date=payload.birth_date,
@@ -55,11 +62,11 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserOut:
 
 
 @router.patch("/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)) -> UserOut:
-    user = db.query(User).filter(User.id == user_id).first()
+def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)) -> UserOut:
+    tenant_id = must_tenant_id(request)
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
     if payload.full_name is not None:
         user.full_name = payload.full_name
     if payload.birth_date is not None:
@@ -68,7 +75,6 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         user.tier = payload.tier
     if payload.bonus_balance is not None:
         user.bonus_balance = int(payload.bonus_balance)
-
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)
