@@ -118,7 +118,7 @@
             {% if v.tags %}<span>{{ v.tags }}</span>{% endif %}
           </div>
           <div class="video-actions">
-            <button class="btn btn-danger" style="font-size:.8rem;padding:.3rem .7rem;" onclick="deleteVideo({{ v.id }})">
+            <button class="btn btn-danger" style="font-size:.8rem;padding:.3rem .7rem;" data-id="{{ v.id }}" onclick="deleteVideo(this.dataset.id)">
               <i class="bi bi-trash"></i> Удалить
             </button>
           </div>
