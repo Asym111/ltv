@@ -12,7 +12,6 @@ from app.services.analytics import list_clients_by_segment
 
 
 def _parse_dt(v) -> datetime | None:
-    """Строку ISO → datetime. Если уже datetime — возвращает как есть."""
     if v is None:
         return None
     if isinstance(v, datetime):
@@ -23,12 +22,18 @@ def _parse_dt(v) -> datetime | None:
         return None
 
 
-def list_campaigns(db: Session) -> List[Campaign]:
-    return db.query(Campaign).order_by(desc(Campaign.id)).all()
+def list_campaigns(db: Session, tenant_id: int) -> List[Campaign]:
+    return (
+        db.query(Campaign)
+        .filter(Campaign.tenant_id == tenant_id)
+        .order_by(desc(Campaign.id))
+        .all()
+    )
 
 
 def create_campaign(db: Session, data: Dict) -> Campaign:
     c = Campaign(
+        tenant_id=data.get("tenant_id"),
         name=data["name"],
         segment_key=data["segment_key"],
         r_min=data.get("r_min"),
@@ -47,18 +52,21 @@ def create_campaign(db: Session, data: Dict) -> Campaign:
     return c
 
 
-def get_campaign(db: Session, campaign_id: int) -> Optional[Campaign]:
-    return db.query(Campaign).filter(Campaign.id == campaign_id).first()
+def get_campaign(db: Session, campaign_id: int, tenant_id: int | None = None) -> Optional[Campaign]:
+    q = db.query(Campaign).filter(Campaign.id == campaign_id)
+    if tenant_id is not None:
+        q = q.filter(Campaign.tenant_id == tenant_id)
+    return q.first()
 
 
-def build_recipients(db: Session, campaign_id: int) -> Campaign:
-    c = get_campaign(db, campaign_id)
+def build_recipients(db: Session, campaign_id: int, tenant_id: int | None = None) -> Campaign:
+    c = get_campaign(db, campaign_id, tenant_id=tenant_id)
     if not c:
         raise ValueError("Campaign not found")
 
-    # Берём всех клиентов сегмента по фильтрам
     res = list_clients_by_segment(
         db,
+        tenant_id=c.tenant_id,
         key=c.segment_key,
         limit=100000,
         offset=0,
@@ -70,28 +78,22 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
     )
     items = res.get("items") or []
 
-    # Очистка старого снапшота
     db.query(CampaignRecipient).filter(
         CampaignRecipient.campaign_id == c.id
     ).delete(synchronize_session=False)
 
-    # Вставка с конвертацией last_purchase_at строки → datetime
     for it in items:
         r = CampaignRecipient(
             campaign_id=c.id,
             phone=str(it.get("phone") or ""),
             full_name=it.get("full_name"),
             tier=str(it.get("tier") or "Bronze"),
-
-            last_purchase_at=_parse_dt(it.get("last_purchase_at")),  # ← фикс
+            last_purchase_at=_parse_dt(it.get("last_purchase_at")),
             recency_days=int(it.get("recency_days") or 0),
-
             purchases_90d=int(it.get("purchases_90d") or 0),
             revenue_90d=int(it.get("revenue_90d") or 0),
-
             purchases_total=int(it.get("purchases_total") or 0),
             revenue_total=int(it.get("revenue_total") or 0),
-
             r_score=int(it.get("r_score") or 1),
             f_score=int(it.get("f_score") or 1),
             m_score=int(it.get("m_score") or 1),
@@ -101,7 +103,6 @@ def build_recipients(db: Session, campaign_id: int) -> Campaign:
 
     c.recipients_total = int(len(items))
     c.status = "ready" if c.recipients_total > 0 else "draft"
-
     db.add(c)
     db.commit()
     db.refresh(c)
@@ -117,10 +118,7 @@ def list_recipients(
     return (
         db.query(CampaignRecipient)
         .filter(CampaignRecipient.campaign_id == campaign_id)
-        .order_by(
-            desc(CampaignRecipient.revenue_90d),
-            desc(CampaignRecipient.purchases_90d),
-        )
+        .order_by(desc(CampaignRecipient.revenue_90d), desc(CampaignRecipient.purchases_90d))
         .offset(offset)
         .limit(limit)
         .all()

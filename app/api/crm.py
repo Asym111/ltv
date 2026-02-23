@@ -1,6 +1,7 @@
+# app/api/crm.py
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
@@ -27,10 +28,19 @@ def normalize_phone(raw: str) -> str:
     return digits
 
 
+def must_tenant_id(request: Request) -> int:
+    u = getattr(request.state, "user", None) or {}
+    tid = u.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(tid)
+
+
 @router.get("/client/{phone}", response_model=ClientMetricsOut)
-def get_client_metrics(phone: str, db: Session = Depends(get_db)) -> ClientMetricsOut:
+def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_db)) -> ClientMetricsOut:
+    tenant_id = must_tenant_id(request)
     p = normalize_phone(phone)
-    user = db.query(User).filter(User.phone == p).first()
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.phone == p).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
@@ -38,38 +48,22 @@ def get_client_metrics(phone: str, db: Session = Depends(get_db)) -> ClientMetri
     refunded = func.coalesce(Transaction.refunded_amount, 0)
     net_paid = (paid - refunded)
 
-    # total_spent = сумма net_paid (но не ниже 0 на уровне строки)
     total_spent_expr = func.coalesce(
-        func.sum(
-            case(
-                (net_paid > 0, net_paid),
-                else_=0,
-            )
-        ),
-        0,
+        func.sum(case((net_paid > 0, net_paid), else_=0)), 0
     )
-
-    # purchases_count = число транзакций, где net_paid > 0
     purchases_count_expr = func.coalesce(
-        func.sum(
-            case(
-                (net_paid > 0, 1),
-                else_=0,
-            )
-        ),
-        0,
+        func.sum(case((net_paid > 0, 1), else_=0)), 0
     )
 
     total_spent, purchases_count = (
         db.query(total_spent_expr, purchases_count_expr)
-        .filter(Transaction.user_id == user.id)
+        .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
         .first()
     )
 
     total_spent = int(total_spent or 0)
     purchases_count = int(purchases_count or 0)
     avg_check = (total_spent / purchases_count) if purchases_count else 0.0
-
     bonus_balance = int(user.bonus_balance or 0)
 
     return ClientMetricsOut(

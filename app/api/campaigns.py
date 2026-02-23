@@ -1,7 +1,7 @@
 # app/api/campaigns.py
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -11,21 +11,34 @@ from app.services.campaigns import list_campaigns, create_campaign, get_campaign
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
+def must_tenant_id(request: Request) -> int:
+    u = getattr(request.state, "user", None) or {}
+    tid = u.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(tid)
+
+
 @router.get("/", response_model=list[CampaignOut])
-def campaigns_list(db: Session = Depends(get_db)) -> list[CampaignOut]:
-    rows = list_campaigns(db)
+def campaigns_list(request: Request, db: Session = Depends(get_db)) -> list[CampaignOut]:
+    tenant_id = must_tenant_id(request)
+    rows = list_campaigns(db, tenant_id=tenant_id)
     return [CampaignOut.model_validate(r, from_attributes=True) for r in rows]
 
 
 @router.post("/", response_model=CampaignOut)
-def campaigns_create(payload: CampaignCreateIn, db: Session = Depends(get_db)) -> CampaignOut:
-    c = create_campaign(db, payload.model_dump())
+def campaigns_create(payload: CampaignCreateIn, request: Request, db: Session = Depends(get_db)) -> CampaignOut:
+    tenant_id = must_tenant_id(request)
+    data = payload.model_dump()
+    data["tenant_id"] = tenant_id
+    c = create_campaign(db, data)
     return CampaignOut.model_validate(c, from_attributes=True)
 
 
 @router.get("/{campaign_id}", response_model=CampaignDetailOut)
-def campaigns_get(campaign_id: int, db: Session = Depends(get_db)) -> CampaignDetailOut:
-    c = get_campaign(db, campaign_id)
+def campaigns_get(campaign_id: int, request: Request, db: Session = Depends(get_db)) -> CampaignDetailOut:
+    tenant_id = must_tenant_id(request)
+    c = get_campaign(db, campaign_id, tenant_id=tenant_id)
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
@@ -49,7 +62,6 @@ def campaigns_get(campaign_id: int, db: Session = Depends(get_db)) -> CampaignDe
         )
         for r in recs
     ]
-
     return CampaignDetailOut(
         campaign=CampaignOut.model_validate(c, from_attributes=True),
         recipients_total=c.recipients_total,
@@ -58,9 +70,10 @@ def campaigns_get(campaign_id: int, db: Session = Depends(get_db)) -> CampaignDe
 
 
 @router.post("/{campaign_id}/build", response_model=CampaignOut)
-def campaigns_build(campaign_id: int, db: Session = Depends(get_db)) -> CampaignOut:
+def campaigns_build(campaign_id: int, request: Request, db: Session = Depends(get_db)) -> CampaignOut:
+    tenant_id = must_tenant_id(request)
     try:
-        c = build_recipients(db, campaign_id)
+        c = build_recipients(db, campaign_id, tenant_id=tenant_id)
         return CampaignOut.model_validate(c, from_attributes=True)
     except ValueError:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -69,11 +82,13 @@ def campaigns_build(campaign_id: int, db: Session = Depends(get_db)) -> Campaign
 @router.get("/{campaign_id}/recipients", response_model=list[CampaignRecipientOut])
 def campaigns_recipients(
     campaign_id: int,
+    request: Request,
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[CampaignRecipientOut]:
-    c = get_campaign(db, campaign_id)
+    tenant_id = must_tenant_id(request)
+    c = get_campaign(db, campaign_id, tenant_id=tenant_id)
     if not c:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
