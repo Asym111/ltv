@@ -339,6 +339,26 @@ def sa_impersonate(
     finally:
         db.close()
 
+# Добавить в конец app/web/superadmin.py (перед последней строкой файла)
+
+@router.get("/videos", response_class=HTMLResponse)
+def sa_videos_page(request: Request):
+    redir = _require_auth(request)
+    if redir:
+        return redir
+
+    from app.models.video_model import VideoResource
+    db = SessionLocal()
+    try:
+        videos = db.query(VideoResource).order_by(
+            VideoResource.sort_order.asc(), VideoResource.id.desc()
+        ).all()
+        return templates.TemplateResponse("superadmin/videos.html", {
+            "request": request,
+            "videos": videos,
+        })
+    finally:
+        db.close()
 
 @router.get("/exit-impersonate")
 def sa_exit_impersonate(request: Request):

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>База знаний — Superadmin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"/>
+  <style>
+    :root { --bg:#0f1117; --card:#1a1d27; --accent:#7c3aed; --mint:#00c2a8; --text:#e2e8f0; --muted:#64748b; --border:#2d3148; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; }
+    header { background:var(--card); border-bottom:1px solid var(--border); padding:1rem 2rem; display:flex; align-items:center; justify-content:space-between; }
+    .logo { display:flex; align-items:center; gap:.75rem; font-weight:700; font-size:1.1rem; }
+    .logo-badge { background:var(--accent); color:#fff; padding:.25rem .6rem; border-radius:.4rem; font-size:.8rem; }
+    .header-actions { display:flex; gap:1rem; align-items:center; }
+    .btn { padding:.5rem 1rem; border-radius:.5rem; border:none; cursor:pointer; font-size:.875rem; font-weight:500; text-decoration:none; display:inline-flex; align-items:center; gap:.4rem; }
+    .btn-primary { background:var(--mint); color:#000; }
+    .btn-secondary { background:var(--border); color:var(--text); }
+    .btn-danger { background:#dc2626; color:#fff; }
+    main { max-width:1100px; margin:2rem auto; padding:0 1.5rem; }
+    h1 { font-size:1.5rem; font-weight:700; margin-bottom:.25rem; }
+    .subtitle { color:var(--muted); font-size:.875rem; margin-bottom:1.5rem; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem; }
+    .add-form { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    .add-form .full { grid-column:1/-1; }
+    label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:.35rem; }
+    input, select, textarea { width:100%; background:#0f1117; border:1px solid var(--border); color:var(--text); padding:.6rem .75rem; border-radius:.5rem; font-size:.875rem; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+    textarea { resize:vertical; min-height:80px; }
+    .videos-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1.25rem; }
+    .video-card { background:var(--card); border:1px solid var(--border); border-radius:.75rem; overflow:hidden; }
+    .video-thumb { position:relative; width:100%; padding-top:56.25%; background:#000; }
+    .video-thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .video-thumb .play-btn { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.4); opacity:0; transition:.2s; font-size:2.5rem; color:#fff; text-decoration:none; }
+    .video-thumb:hover .play-btn { opacity:1; }
+    .video-info { padding:1rem; }
+    .video-title { font-weight:600; margin-bottom:.35rem; font-size:.95rem; }
+    .video-meta { color:var(--muted); font-size:.8rem; display:flex; gap:.75rem; margin-bottom:.75rem; }
+    .video-actions { display:flex; gap:.5rem; }
+    .badge { padding:.2rem .6rem; border-radius:9999px; font-size:.75rem; font-weight:600; }
+    .badge-cat { background:#1e293b; color:#94a3b8; }
+    .empty { text-align:center; padding:3rem; color:var(--muted); }
+    #addErr { color:#f87171; font-size:.85rem; margin-bottom:.5rem; display:none; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <span class="logo-badge">SA</span>
+    LTV Superadmin — База знаний
+  </div>
+  <div class="header-actions">
+    <a href="/superadmin" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Назад</a>
+    <a href="/superadmin/logout" class="btn btn-secondary"><i class="bi bi-box-arrow-right"></i> Выйти</a>
+  </div>
+</header>
+
+<main>
+  <h1>База знаний</h1>
+  <p class="subtitle">Управление обучающими видео — видны всем тенантам</p>
+
+  <!-- Форма добавления -->
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:1rem;"><i class="bi bi-plus-circle me-2"></i>Добавить видео</div>
+    <div id="addErr"></div>
+    <div class="add-form">
+      <div>
+        <label>YouTube ссылка *</label>
+        <input id="vidUrl" type="text" placeholder="https://www.youtube.com/watch?v=..."/>
+      </div>
+      <div>
+        <label>Название *</label>
+        <input id="vidTitle" type="text" placeholder="Как увеличить LTV клиентов"/>
+      </div>
+      <div>
+        <label>Категория</label>
+        <select id="vidCat">
+          <option value="general">Общее</option>
+          <option value="loyalty">Лояльность</option>
+          <option value="marketing">Маркетинг</option>
+          <option value="analytics">Аналитика</option>
+          <option value="crm">CRM</option>
+          <option value="campaigns">Кампании</option>
+          <option value="settings">Настройки</option>
+          <option value="other">Другое</option>
+        </select>
+      </div>
+      <div>
+        <label>Теги (через запятую)</label>
+        <input id="vidTags" type="text" placeholder="retention, rfm, бонусы"/>
+      </div>
+      <div class="full">
+        <label>Описание</label>
+        <textarea id="vidDesc" placeholder="Краткое описание (необязательно)"></textarea>
+      </div>
+      <div class="full" style="display:flex;justify-content:flex-end;gap:.75rem;">
+        <button class="btn btn-primary" onclick="addVideo()"><i class="bi bi-plus-circle"></i> Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Список видео -->
+  <div id="videosList">
+    {% if videos %}
+    <div class="videos-grid">
+      {% for v in videos %}
+      <div class="video-card" id="vc-{{ v.id }}">
+        <div class="video-thumb">
+          <img src="https://img.youtube.com/vi/{{ v.youtube_id }}/hqdefault.jpg" alt="{{ v.title }}"/>
+          <a href="https://www.youtube.com/watch?v={{ v.youtube_id }}" target="_blank" class="play-btn">
+            <i class="bi bi-play-circle-fill"></i>
+          </a>
+        </div>
+        <div class="video-info">
+          <div class="video-title">{{ v.title }}</div>
+          <div class="video-meta">
+            <span class="badge badge-cat">{{ v.category }}</span>
+            {% if v.tags %}<span>{{ v.tags }}</span>{% endif %}
+          </div>
+          <div class="video-actions">
+            <button class="btn btn-danger" style="font-size:.8rem;padding:.3rem .7rem;" onclick="deleteVideo({{ v.id }})">
+              <i class="bi bi-trash"></i> Удалить
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">
+      <i class="bi bi-camera-video" style="font-size:3rem;"></i>
+      <p style="margin-top:1rem;">Видео не добавлены. Добавьте первое выше.</p>
+    </div>
+    {% endif %}
+  </div>
+</main>
+
+<script>
+async function addVideo() {
+  const url   = document.getElementById('vidUrl').value.trim();
+  const title = document.getElementById('vidTitle').value.trim();
+  const cat   = document.getElementById('vidCat').value;
+  const tags  = document.getElementById('vidTags').value.trim();
+  const desc  = document.getElementById('vidDesc').value.trim();
+  const err   = document.getElementById('addErr');
+
+  err.style.display = 'none';
+  if (!url || !title) { err.textContent = 'Заполните YouTube ссылку и название'; err.style.display='block'; return; }
+
+  const r = await fetch('/api/videos/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({youtube_url:url, title, category:cat, tags:tags||null, description:desc||null, sort_order:0})
+  });
+  const j = await r.json();
+  if (!r.ok) { err.textContent = j.detail || 'Ошибка'; err.style.display='block'; return; }
+
+  // Обновляем страницу
+  location.reload();
+}
+
+async function deleteVideo(id) {
+  if (!confirm('Удалить видео?')) return;
+  const r = await fetch(`/api/videos/${id}`, {method:'DELETE'});
+  if (r.ok) {
+    document.getElementById(`vc-${id}`)?.remove();
+  }
+}
+</script>
+</body>
+</html>
