@@ -25,14 +25,22 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
-def calc_overview_numbers(db: Session, now: datetime | None = None) -> OverviewNumbers:
+def calc_overview_numbers(db: Session, tenant_id: int | None = None, now: datetime | None = None) -> OverviewNumbers:
     now = now or _utcnow()
     since_30d = now - timedelta(days=30)
 
-    clients = int(db.query(func.count(User.id)).scalar() or 0)
+    uq = db.query(func.count(User.id))
+    if tenant_id:
+        uq = uq.filter(User.tenant_id == tenant_id)
+    clients = int(uq.scalar() or 0)
+
+    txq_base = db.query(Transaction)
+    if tenant_id:
+        txq_base = txq_base.filter(Transaction.tenant_id == tenant_id)
 
     subq_last = (
-        db.query(
+        txq_base
+        .with_entities(
             Transaction.user_id.label("user_id"),
             func.max(Transaction.created_at).label("last_tx"),
         )
@@ -52,16 +60,18 @@ def calc_overview_numbers(db: Session, now: datetime | None = None) -> OverviewN
         .scalar() or 0
     )
 
+    rev_q = db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
+    if tenant_id:
+        rev_q = rev_q.filter(Transaction.tenant_id == tenant_id)
     total_revenue_30d = int(
-        db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
-        .filter(Transaction.created_at >= since_30d)
-        .scalar() or 0
+        rev_q.filter(Transaction.created_at >= since_30d).scalar() or 0
     )
 
+    cnt_q = db.query(func.count(Transaction.id))
+    if tenant_id:
+        cnt_q = cnt_q.filter(Transaction.tenant_id == tenant_id)
     count_30d = int(
-        db.query(func.count(Transaction.id))
-        .filter(Transaction.created_at >= since_30d)
-        .scalar() or 0
+        cnt_q.filter(Transaction.created_at >= since_30d).scalar() or 0
     )
 
     avg_check_30d = round(float(total_revenue_30d / count_30d), 2) if count_30d else 0.0
@@ -75,15 +85,14 @@ def calc_overview_numbers(db: Session, now: datetime | None = None) -> OverviewN
     )
 
 
-def calc_top_clients_share(db: Session) -> dict[str, Any]:
-    rows = (
-        db.query(
-            Transaction.user_id,
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("spent"),
-        )
-        .group_by(Transaction.user_id)
-        .all()
+def calc_top_clients_share(db: Session, tenant_id: int | None = None) -> dict[str, Any]:
+    q = db.query(
+        Transaction.user_id,
+        func.coalesce(func.sum(Transaction.paid_amount), 0).label("spent"),
     )
+    if tenant_id:
+        q = q.filter(Transaction.tenant_id == tenant_id)
+    rows = q.group_by(Transaction.user_id).all()
     if not rows:
         return {"top_20_share": 0.0, "users_with_tx": 0, "total_spent": 0, "top_n": 0}
 
@@ -272,7 +281,7 @@ def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[st
     except Exception:
         pass
 
-    pareto = calc_top_clients_share(db)
+    pareto = calc_top_clients_share(db, tenant_id=tenant_id)
 
     payload: dict[str, Any] = {
         "summary": {
@@ -316,7 +325,7 @@ def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[st
     # Расширенная аналитика если сервис доступен
     try:
         from app.services.analytics import build_analytics_overview  # type: ignore
-        ov = build_analytics_overview(db)
+        ov = build_analytics_overview(db, tenant_id=tenant_id)
         payload["analytics_overview"] = _jsonable(ov)
 
         segments: list[dict] = []

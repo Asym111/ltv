@@ -3464,3 +3464,59 @@ document.addEventListener("DOMContentLoaded", () => {
   initAiOverviewWidget();
   initAiPanel();
 });
+// Р”РѕР±Р°РІРёС‚СЊ РІ static/js/admin.js вЂ” РІ РєРѕРЅРµС† С„Р°Р№Р»Р° РёР»Рё РїРѕСЃР»Рµ DOMContentLoaded
+// РђРґР°РїС‚РёРІРЅС‹Р№ С€СЂРёС„С‚ РґР»СЏ Р±РѕР»СЊС€РёС… С‡РёСЃРµР» РЅР° РґР°С€Р±РѕСЂРґРµ
+
+function adaptiveFontSize(el) {
+  if (!el) return;
+  const text = el.textContent.replace(/\s/g, '');
+  const len = text.length;
+  let size;
+  if (len <= 7)       size = '2rem';      // РґРѕ 9 999 999
+  else if (len <= 9)  size = '1.5rem';    // РґРѕ 999 999 999
+  else if (len <= 11) size = '1.2rem';    // РґРѕ 99 999 999 999
+  else                size = '1rem';
+  el.style.fontSize = size;
+  el.style.fontWeight = len > 9 ? '700' : '900';
+  el.style.lineHeight = '1.2';
+}
+
+function applyAdaptiveFonts() {
+  // Р’СЃРµ С‡РёСЃР»Р° РЅР° РґР°С€Р±РѕСЂРґРµ вЂ” РёС‰РµРј СЌР»РµРјРµРЅС‚С‹ СЃ Р±РѕР»СЊС€РёРјРё С‡РёСЃР»Р°РјРё
+  const selectors = [
+    '#dashRevenue30', '#dashAvgCheck30', '#dashTxCount30',
+    '#dashNewClients',
+    '[data-adaptive-font]',
+    '.stat-big', '.kpi-value', '.metric-value',
+    // РђРЅР°Р»РёС‚РёРєР°
+    '#anRevenue30', '#anAvgCheck', '#anClients',
+  ];
+  selectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(adaptiveFontSize);
+  });
+}
+
+// Р—Р°РїСѓСЃРєР°С‚СЊ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С…
+document.addEventListener('DOMContentLoaded', () => {
+  // РќР°Р±Р»СЋРґР°РµРј Р·Р° РёР·РјРµРЅРµРЅРёСЏРјРё РІ С‡РёСЃР»Р°С…
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach(m => {
+      if (m.type === 'characterData' || m.type === 'childList') {
+        const el = m.target.nodeType === 3 ? m.target.parentElement : m.target;
+        if (el && (el.id?.includes('Revenue') || el.id?.includes('Check') || 
+                   el.id?.includes('Count') || el.id?.includes('Clients') ||
+                   el.classList?.contains('stat-big'))) {
+          adaptiveFontSize(el);
+        }
+      }
+    });
+  });
+
+  observer.observe(document.body, {
+    childList: true, subtree: true, characterData: true
+  });
+
+  // РџРµСЂРІС‹Р№ Р·Р°РїСѓСЃРє С‡РµСЂРµР· 500РјСЃ (РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С…)
+  setTimeout(applyAdaptiveFonts, 500);
+  setTimeout(applyAdaptiveFonts, 1500);
+});

@@ -157,19 +157,19 @@ async def _try_llm(
 # =========================
 # Client payload builder
 # =========================
-def _build_client_payload(db: Session, raw_phone: str) -> dict[str, Any]:
+def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = None) -> dict[str, Any]:
     phone = _norm_phone(raw_phone)
-    user = db.query(User).filter(User.phone == phone).first()
+    q = db.query(User).filter(User.phone == phone)
+    if tenant_id:
+        q = q.filter(User.tenant_id == tenant_id)
+    user = q.first()
     if not user:
         return {"error": "client_not_found", "phone": phone}
 
-    txs = (
-        db.query(Transaction)
-        .filter(Transaction.user_id == user.id)
-        .order_by(Transaction.created_at.desc())
-        .limit(50)
-        .all()
-    )
+    txq = db.query(Transaction).filter(Transaction.user_id == user.id)
+    if tenant_id:
+        txq = txq.filter(Transaction.tenant_id == tenant_id)
+    txs = txq.order_by(Transaction.created_at.desc()).limit(50).all()
 
     total_spent = sum(t.paid_amount for t in txs if t.paid_amount)
     purchases_count = len(txs)
@@ -351,24 +351,30 @@ async def ai_ask_get(
     context: str = "business",
     question: Optional[str] = None,
     phone: Optional[str] = None,
+    request: Request = None,
     db: Session = Depends(get_db),
 ) -> Any:
     if not question:
         return {"ok": True, "message": "Используй POST /api/ai/ask"}
     payload_in = AiAskIn(context=context, question=question, phone=phone)  # type: ignore
-    return await ai_ask(payload_in, db)
+    return await ai_ask(payload_in, request, db)
 
 
 @router.post("/ask", response_model=AiAskOut)
-async def ai_ask(payload_in: AiAskIn, db: Session = Depends(get_db)) -> AiAskOut:
+async def ai_ask(payload_in: AiAskIn, request: Request, db: Session = Depends(get_db)) -> AiAskOut:
     context = payload_in.context
 
+    # Получаем tenant_id из сессии
+    current_user = getattr(request.state, "user", None) or {} if request else {}
+    tenant_id = current_user.get("tenant_id")
+    tenant_id = int(tenant_id) if tenant_id else None
+
     if context == "business":
-        payload = build_overview_payload(db)
+        payload = build_overview_payload(db, tenant_id=tenant_id)
     else:
         if not payload_in.phone:
             raise HTTPException(status_code=400, detail="phone required for client context")
-        payload = _build_client_payload(db, payload_in.phone)
+        payload = _build_client_payload(db, payload_in.phone, tenant_id=tenant_id)
 
     last_err: str | None = None
     for prov in _provider_order():
@@ -523,16 +529,14 @@ async def _handle_grant_bonus(
 
     # Начисляем бонусы через BonusGrant
     now = datetime.utcnow()
-    # source содержит причину (reason) — поле note в модели отсутствует
-    source_str = f"ai_grant:{reason[:40]}" if reason else "ai_grant"
     grant = BonusGrant(
         user_id=user.id,
         transaction_id=None,
         amount=amount,
-        remaining=amount,
-        source=source_str,
-        status="available",
-        available_from=now,
+        source="ai_grant",
+        status="available",   # AI бонусы доступны сразу
+        note=reason,
+        activated_at=now,
         expires_at=now + timedelta(days=30),
         created_at=now,
     )
@@ -580,23 +584,18 @@ async def _handle_create_campaign(
     })
 
     built = False
-    build_error: str | None = None
     if _truthy(_qs_str(qs, "build")):
-        try:
-            svc_build_recipients(db, c.id)
-            built = True
-        except Exception as e:
-            # Не роняем всё из-за ошибки построения получателей
-            build_error = str(e)
+        svc_build_recipients(db, c.id)
+        built = True
 
     return AiExecuteOut(
         ok=True,
         performed=True,
         action=action_label or "Создание кампании",
-        nav=f"/admin/campaigns/{c.id}",
+        nav="/admin/campaigns",
         message=(
             f"Кампания «{name}» создана (id={c.id}). "
             + ("Получатели построены. " if built else "")
-            + ("Открываю кампанию." if not build_error else f"Создана, но получателей не удалось построить: {build_error}")
+            + "Открываю список кампаний."
         ),
     )
