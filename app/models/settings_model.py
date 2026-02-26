@@ -42,7 +42,11 @@ class Settings(Base):
     birthday_message_7d = Column(Text, nullable=True)
     birthday_enabled    = Column(Boolean, default=True, nullable=False)
 
-    # --- Тиры — JSONB ---
+    # --- Пороги тиров (Bronze → Silver → Gold) ---
+    silver_threshold = Column(Integer, default=50000,  nullable=False)
+    gold_threshold   = Column(Integer, default=200000, nullable=False)
+
+    # --- Тиры — JSONB (legacy) ---
     tiers_json = Column(JSONB, nullable=True)
 
     # --- Повышенный бонус ---

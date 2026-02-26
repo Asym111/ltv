@@ -77,6 +77,13 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        # Обновляем данные существующего клиента если переданы
+        if payload.full_name:
+            user.full_name = payload.full_name
+        if payload.birth_date:
+            user.birth_date = payload.birth_date
+        db.commit()
 
     paid_amount = payload.paid_amount if payload.paid_amount is not None else payload.amount
     paid_amount = int(paid_amount or 0)
@@ -122,6 +129,28 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     # bonus_balance = total (available + pending) — клиент видит все свои бонусы
     # Списывать можно только available, но показываем всё
     user.bonus_balance = int(balances2["total"])
+
+    # ── Автоапгрейд тира по накопленной сумме покупок ──────────
+    try:
+        from sqlalchemy import func as _func
+        total_spent = int(
+            db.query(_func.coalesce(_func.sum(Transaction.paid_amount), 0))
+            .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
+            .scalar() or 0
+        )
+        silver_threshold = int(getattr(settings, "silver_threshold", None) or 50000)
+        gold_threshold   = int(getattr(settings, "gold_threshold",   None) or 200000)
+        if total_spent >= gold_threshold:
+            new_tier = "Gold"
+        elif total_spent >= silver_threshold:
+            new_tier = "Silver"
+        else:
+            new_tier = "Bronze"
+        if user.tier != new_tier:
+            user.tier = new_tier
+    except Exception:
+        pass
+
     db.commit()
 
     out = TransactionOut.model_validate(txn)

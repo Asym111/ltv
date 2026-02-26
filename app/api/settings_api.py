@@ -38,6 +38,8 @@ def get_or_create_settings(db: Session) -> Settings:
         boost_percent=7,
         boost_always=False,
         boost_mode="days",
+        silver_threshold=50000,
+        gold_threshold=200000,
         cost_per_lead=0,
         cost_per_client=0,
         tiers_json=[
@@ -95,6 +97,8 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> S
     row.boost_weekdays = payload.boost_weekdays
     row.boost_dates    = payload.boost_dates
 
+    row.silver_threshold = payload.silver_threshold
+    row.gold_threshold   = payload.gold_threshold
     row.cost_per_lead   = payload.cost_per_lead
     row.cost_per_client = payload.cost_per_client
 

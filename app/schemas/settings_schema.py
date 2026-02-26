@@ -40,6 +40,8 @@ class SettingsOut(BaseModel):
     boost_mode:     str  = "days"
     boost_weekdays: list[str] = []
     boost_dates:    list[str] = []
+    silver_threshold: int = 50000
+    gold_threshold:   int = 200000
     cost_per_lead:   int = 0
     cost_per_client: int = 0
     tiers: list[TierItem] = []
@@ -113,6 +115,8 @@ class SettingsUpdate(BaseModel):
     boost_mode:     str  = Field(default="days")
     boost_weekdays: list[str] = []
     boost_dates:    list[str] = []
+    silver_threshold: int = Field(default=50000,  ge=0)
+    gold_threshold:   int = Field(default=200000, ge=0)
     cost_per_lead:   int = Field(default=0, ge=0)
     cost_per_client: int = Field(default=0, ge=0)
     tiers: list[TierItem] = []
