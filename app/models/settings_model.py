@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Column, Integer, DateTime, String, Boolean, Text
+from sqlalchemy import Column, Integer, DateTime, String, Boolean, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
 
@@ -9,6 +9,11 @@ class Settings(Base):
     __tablename__ = "settings"
 
     id = Column(Integer, primary_key=True)
+
+    # --- Tenant ---
+    tenant_id = Column(Integer, nullable=True)  # nullable для обратной совместимости
+
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_settings_tenant"),)
 
     # --- Название бонусов ---
     bonus_name = Column(String(40), default="баллы", nullable=False)

@@ -55,7 +55,7 @@ def must_tenant_id(request: Request) -> int:
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
-    settings = get_settings(db)
+    settings = get_settings(db, tenant_id=tenant_id)
 
     user_phone = normalize_phone(payload.user_phone)
 
@@ -165,7 +165,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 @router.post("/{tx_id}/refund", response_model=TransactionOut)
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
-    settings = get_settings(db)
+    settings = get_settings(db, tenant_id=tenant_id)
     now = datetime.utcnow()
 
     tx = (

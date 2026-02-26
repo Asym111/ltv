@@ -12,10 +12,27 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
-def get_settings(db: Session) -> Settings:
+def get_settings(db: Session, tenant_id: int | None = None) -> Settings:
+    """
+    Возвращает настройки для тенанта.
+    Если для тенанта нет своих настроек — берём глобальные (tenant_id IS NULL).
+    """
+    # Сначала ищем настройки конкретного тенанта
+    if tenant_id:
+        s = db.scalar(
+            select(Settings)
+            .where(Settings.tenant_id == tenant_id)
+            .limit(1)
+        )
+        if s:
+            return s
+
+    # Fallback — глобальные настройки (первая запись)
     s = db.scalar(select(Settings).order_by(Settings.id.asc()).limit(1))
     if s:
         return s
+
+    # Создаём дефолтные глобальные настройки
     s = Settings()
     db.add(s)
     db.commit()
