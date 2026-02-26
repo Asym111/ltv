@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
-Tier = Literal["Bronze", "Silver", "Gold"]
+KNOWN_TIERS = {"Bronze", "Silver", "Gold"}
 
 
 class ClientMetricsOut(BaseModel):
@@ -12,7 +12,13 @@ class ClientMetricsOut(BaseModel):
 
     phone: str
     full_name: Optional[str] = None
-    tier: Tier = "Bronze"
+    tier: str = "Bronze"
+
+    @field_validator("tier", mode="before")
+    @classmethod
+    def normalize_tier(cls, v: str) -> str:
+        """Если тир не стандартный (кастомный уровень) — возвращаем Bronze"""
+        return v if v in KNOWN_TIERS else "Bronze"
 
     total_spent: int
     purchases_count: int
