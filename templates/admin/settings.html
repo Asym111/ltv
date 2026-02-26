@@ -97,6 +97,28 @@
 
         <div class="settings-divider"></div>
 
+        <!-- Пороги автоапгрейда тиров -->
+        <div class="settings-field-row">
+          <div class="settings-field">
+            <label class="settings-label">Silver — порог накоплений</label>
+            <div class="settings-hint">Клиент переходит в Silver при достижении суммы</div>
+            <div class="settings-input-with-unit" style="max-width:240px">
+              <input id="silver_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="50000">
+              <span class="settings-unit">₸</span>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label">Gold — порог накоплений</label>
+            <div class="settings-hint">Клиент переходит в Gold при достижении суммы</div>
+            <div class="settings-input-with-unit" style="max-width:240px">
+              <input id="gold_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="200000">
+              <span class="settings-unit">₸</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
         <div class="settings-field">
           <label class="settings-label">Приветственный бонус</label>
           <div class="settings-hint">Начисляется за первую покупку клиента (0 = выключено)</div>

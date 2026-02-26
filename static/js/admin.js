@@ -2434,6 +2434,8 @@ function initSettingsPage() {
     setVal("earn_bronze_percent", data.earn_bronze_percent ?? 3);
     setVal("earn_silver_percent", data.earn_silver_percent ?? 5);
     setVal("earn_gold_percent",   data.earn_gold_percent   ?? 7);
+    setVal("silver_threshold", data.silver_threshold ?? 50000);
+    setVal("gold_threshold",   data.gold_threshold   ?? 200000);
     setVal("welcome_bonus_percent", data.welcome_bonus_percent ?? 0);
 
     // Redeem
@@ -2515,6 +2517,8 @@ function initSettingsPage() {
       earn_bronze_percent: getInt("earn_bronze_percent", 3),
       earn_silver_percent: getInt("earn_silver_percent", 5),
       earn_gold_percent:   getInt("earn_gold_percent",   7),
+      silver_threshold: getInt("silver_threshold", 50000),
+      gold_threshold:   getInt("gold_threshold",   200000),
       welcome_bonus_percent: getInt("welcome_bonus_percent", 0),
 
       redeem_max_percent: getInt("redeem_max_percent", 30),
