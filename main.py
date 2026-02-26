@@ -11,6 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
+from collections import defaultdict
+import time
+
+# Простой in-memory rate limit для /auth (brute-force защита)
+_auth_attempts: dict = defaultdict(list)  # ip -> [timestamps]
+AUTH_RATE_LIMIT = 10   # попыток
+AUTH_RATE_WINDOW = 60  # секунд
 
 from app.core.database import engine, Base, SessionLocal
 
@@ -64,7 +71,20 @@ def _int_env(name: str, default: int) -> int:
 
 AUTH_REMEMBER_DAYS = _int_env("AUTH_REMEMBER_DAYS", 30)
 SESSION_SECRET = (os.getenv("SESSION_SECRET", "") or "").strip()
-COOKIE_SECURE = (os.getenv("COOKIE_SECURE", "0") or "0").strip() == "1"
+
+
+def _is_prod() -> bool:
+    env = (os.getenv("ENV", "") or "").strip().lower()
+    return env in {"prod", "production"} or bool(os.getenv("RENDER"))
+
+
+IS_PROD = _is_prod()
+COOKIE_SECURE = (os.getenv("COOKIE_SECURE", "1" if IS_PROD else "0") or ("1" if IS_PROD else "0")).strip() == "1"
+
+if IS_PROD:
+    weak_secrets = {"", "dev-secret-change-me", "change-me", "changeme"}
+    if SESSION_SECRET.strip().lower() in weak_secrets or len(SESSION_SECRET) < 32:
+        raise RuntimeError("Unsafe SESSION_SECRET for production. Set strong random secret (>=32 chars).")
 
 
 # ПАТЧ для main.py — заменить AuthGuardMiddleware.dispatch
@@ -97,15 +117,20 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Публичные пути — без проверок
+        # В продакшне /docs и /openapi.json закрыты
+        docs_open = not IS_PROD
         if (
             path.startswith("/static")
             or path.startswith("/dev")
             or path in ("/auth", "/auth/", "/logout", "/logout/", "/health", "/favicon.ico")
             or path.startswith("/superadmin")
-            or path.startswith("/docs")
-            or path.startswith("/openapi.json")
+            or (docs_open and (path.startswith("/docs") or path.startswith("/openapi.json") or path.startswith("/redoc")))
         ):
             return await call_next(request)
+
+        # В продакшне /docs закрыты — возвращаем 404
+        if IS_PROD and (path.startswith("/docs") or path.startswith("/openapi.json") or path.startswith("/redoc")):
+            return JSONResponse({"detail": "Not found"}, status_code=404)
 
         sess = request.session or {}
         uid = sess.get("uid")

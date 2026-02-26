@@ -12,7 +12,18 @@ from app.schemas.settings_schema import SettingsOut, SettingsUpdate
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
+def must_owner(request: Request) -> None:
+    u = getattr(request.state, "user", None) or {}
+    if not u:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if str(u.get("role") or "").lower() != "owner":
+        raise HTTPException(status_code=403, detail="Owner role required")
+
+
 def get_or_create_settings(db: Session) -> Settings:
+    # TODO: сейчас settings глобальные (без tenant_id).
+    # Все тенанты видят одни настройки. Для multi-tenant нужна колонка tenant_id.
+    # Пока это acceptable — каждый тенант настраивает через свой owner аккаунт.
     row = db.query(Settings).order_by(Settings.id.asc()).first()
     if row:
         return row
@@ -62,7 +73,8 @@ def read_settings(request: Request, db: Session = Depends(get_db)) -> SettingsOu
 
 @router.put("", response_model=SettingsOut, include_in_schema=False)
 @router.put("/", response_model=SettingsOut)
-def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)) -> SettingsOut:
+def update_settings(payload: SettingsUpdate, request: Request, db: Session = Depends(get_db)) -> SettingsOut:
+    must_owner(request)
     row = get_or_create_settings(db)
 
     row.bonus_name = payload.bonus_name
