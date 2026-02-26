@@ -157,17 +157,52 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
 
 
 def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
+    """
+    Логика начисления % бонусов:
+
+    Если настроены Уровни (tiers_json не пуст):
+      → % берётся из тира клиента (накопительный тир).
+        Тир обновляется автоматически при каждой транзакции.
+        Пример: клиент Silver → всегда 5% независимо от суммы чека.
+
+    Если Уровни не настроены:
+      → % определяется по сумме ТЕКУЩЕГО чека:
+        чек >= gold_threshold  → earn_gold_percent
+        чек >= silver_threshold → earn_silver_percent
+        иначе                  → earn_bronze_percent
+    """
     paid_amount = int(paid_amount or 0)
     if paid_amount <= 0:
         return 0
 
-    tier = (tier or "Bronze").strip()
-    if tier == "Gold":
-        rate = int(settings.earn_gold_percent)
-    elif tier == "Silver":
-        rate = int(settings.earn_silver_percent)
+    tiers_cfg = getattr(settings, "tiers_json", None) or []
+
+    if tiers_cfg:
+        # ── Режим уровней: % из тира клиента ──────────────────
+        tier = (tier or "Bronze").strip()
+        # Ищем точное совпадение по имени в tiers_json
+        tier_map = {
+            t.get("name", ""): t.get("bonus_percent", 0)
+            for t in tiers_cfg if isinstance(t, dict)
+        }
+        if tier in tier_map:
+            rate = int(tier_map[tier])
+        elif tier == "Gold":
+            rate = int(settings.earn_gold_percent)
+        elif tier == "Silver":
+            rate = int(settings.earn_silver_percent)
+        else:
+            rate = int(settings.earn_bronze_percent)
     else:
-        rate = int(settings.earn_bronze_percent)
+        # ── Режим чека: % по сумме одного чека ────────────────
+        silver_thr = int(getattr(settings, "silver_threshold", None) or 5000)
+        gold_thr   = int(getattr(settings, "gold_threshold",   None) or 20000)
+        if paid_amount >= gold_thr:
+            rate = int(settings.earn_gold_percent)
+        elif paid_amount >= silver_thr:
+            rate = int(settings.earn_silver_percent)
+        else:
+            rate = int(settings.earn_bronze_percent)
 
     return int(paid_amount * rate // 100)
 

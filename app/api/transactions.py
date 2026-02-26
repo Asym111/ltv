@@ -130,24 +130,28 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     # Списывать можно только available, но показываем всё
     user.bonus_balance = int(balances2["total"])
 
-    # ── Автоапгрейд тира по накопленной сумме покупок ──────────
+    # ── Автоапгрейд тира по накопленной сумме (только если настроены уровни) ──
     try:
-        from sqlalchemy import func as _func
-        total_spent = int(
-            db.query(_func.coalesce(_func.sum(Transaction.paid_amount), 0))
-            .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
-            .scalar() or 0
-        )
-        silver_threshold = int(getattr(settings, "silver_threshold", None) or 50000)
-        gold_threshold   = int(getattr(settings, "gold_threshold",   None) or 200000)
-        if total_spent >= gold_threshold:
-            new_tier = "Gold"
-        elif total_spent >= silver_threshold:
-            new_tier = "Silver"
-        else:
-            new_tier = "Bronze"
-        if user.tier != new_tier:
-            user.tier = new_tier
+        tiers_cfg = settings.tiers_json or []
+        if tiers_cfg:
+            from sqlalchemy import func as _func
+            total_spent = int(
+                db.query(_func.coalesce(_func.sum(Transaction.paid_amount), 0))
+                .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
+                .scalar() or 0
+            )
+            # Сортируем по порогу — выбираем наивысший достигнутый
+            sorted_tiers = sorted(
+                tiers_cfg, key=lambda t: t.get("spend_from", 0), reverse=True
+            )
+            new_tier = "Bronze"  # базовый если ни один порог не достигнут
+            for t in sorted_tiers:
+                if total_spent >= t.get("spend_from", 0):
+                    new_tier = t.get("name", "Bronze")
+                    break
+            if user.tier != new_tier:
+                user.tier = new_tier
+        # Если уровней нет — тир не меняем (он не используется для начисления)
     except Exception:
         pass
 

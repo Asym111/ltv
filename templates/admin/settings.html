@@ -97,21 +97,21 @@
 
         <div class="settings-divider"></div>
 
-        <!-- Пороги автоапгрейда тиров -->
+        <!-- Пороги суммы чека (используется если уровни не настроены) -->
         <div class="settings-field-row">
           <div class="settings-field">
-            <label class="settings-label">Silver — порог накоплений</label>
-            <div class="settings-hint">Клиент переходит в Silver при достижении суммы</div>
+            <label class="settings-label">Silver % — порог суммы чека</label>
+            <div class="settings-hint">Чек ≥ этой суммы → начисляется Silver %. Работает если Уровни не настроены.</div>
             <div class="settings-input-with-unit" style="max-width:240px">
-              <input id="silver_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="50000">
+              <input id="silver_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="5000">
               <span class="settings-unit">₸</span>
             </div>
           </div>
           <div class="settings-field">
-            <label class="settings-label">Gold — порог накоплений</label>
-            <div class="settings-hint">Клиент переходит в Gold при достижении суммы</div>
+            <label class="settings-label">Gold % — порог суммы чека</label>
+            <div class="settings-hint">Чек ≥ этой суммы → начисляется Gold %. Работает если Уровни не настроены.</div>
             <div class="settings-input-with-unit" style="max-width:240px">
-              <input id="gold_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="200000">
+              <input id="gold_threshold" type="number" class="settings-input" min="0" step="1000" placeholder="20000">
               <span class="settings-unit">₸</span>
             </div>
           </div>
@@ -147,7 +147,12 @@
         <div class="settings-field-row">
           <div class="settings-field">
             <label class="settings-label">Название уровня</label>
-            <input id="newTierName" type="text" class="settings-input" placeholder="например: Gold" maxlength="40">
+            <select id="newTierName" class="settings-input">
+              <option value="">— выберите уровень —</option>
+              <option value="Bronze">🥉 Bronze</option>
+              <option value="Silver">🥈 Silver</option>
+              <option value="Gold">🥇 Gold</option>
+            </select>
           </div>
           <div class="settings-field">
             <label class="settings-label">Сумма накоплений от (₸)</label>
