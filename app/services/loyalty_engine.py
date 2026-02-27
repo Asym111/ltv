@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 from app.models.settings_model import Settings
 from app.models.bonus_grant import BonusGrant
 
+# UTC+5 Алматы — единый timezone для всего приложения
+ALMATY = timezone(timedelta(hours=5))
+
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    """Текущее время Алматы (UTC+5), naive для совместимости с БД."""
+    return datetime.now(ALMATY).replace(tzinfo=None)
 
 
 def get_settings(db: Session, tenant_id: int | None = None) -> Settings:

@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# UTC+5 Алматы
+_ALMATY = timezone(timedelta(hours=5))
+
+def _now() -> datetime:
+    """Текущее время Алматы (UTC+5), naive для БД."""
+    return datetime.now(_ALMATY).replace(tzinfo=None)
 
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
@@ -166,7 +173,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
     settings = get_settings(db, tenant_id=tenant_id)
-    now = datetime.utcnow()
+    now = _now()
 
     tx = (
         db.query(Transaction)
