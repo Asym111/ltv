@@ -1915,6 +1915,10 @@ function initClientsList() {
       const data = await apiGet("/api/users/");
       const items = Array.isArray(data) ? data : [];
 
+      // Обновляем счётчик
+      const countBadge = document.getElementById("clientsCount");
+      if (countBadge) countBadge.textContent = items.length;
+
       usersTableBody.innerHTML = items
         .map((u) => {
           const t = u.tier || "Bronze";
@@ -1924,6 +1928,7 @@ function initClientsList() {
               <td>${u.phone}</td>
               <td>${u.full_name || "—"}</td>
               <td><span class="badge ${tierBadgeClass(t)}">${tierRu(t)}</span></td>
+              <td class="text-end">${fmt0(u.bonus_balance || 0)}</td>
               <td class="text-end">
                 <a href="/admin/client/${u.phone}" class="btn btn-sm btn-outline-primary">
                   <i class="bi bi-arrow-right"></i>
@@ -1933,8 +1938,6 @@ function initClientsList() {
           `;
         })
         .join("");
-
-      if (typeof uiToast === "function") uiToast("Клиенты обновлены", "info");
     } catch (e) {
       show(usersError, `Ошибка: ${e.message}`, true);
       usersTableBody.innerHTML = `<tr><td colspan="5" class="text-muted">Ошибка загрузки</td></tr>`;
@@ -2434,8 +2437,8 @@ function initSettingsPage() {
     setVal("earn_bronze_percent", data.earn_bronze_percent ?? 3);
     setVal("earn_silver_percent", data.earn_silver_percent ?? 5);
     setVal("earn_gold_percent",   data.earn_gold_percent   ?? 7);
-    setVal("silver_threshold", data.silver_threshold ?? 5000);
-    setVal("gold_threshold",   data.gold_threshold   ?? 20000);
+    setVal("silver_threshold", data.silver_threshold ?? 50000);
+    setVal("gold_threshold",   data.gold_threshold   ?? 200000);
     setVal("welcome_bonus_percent", data.welcome_bonus_percent ?? 0);
 
     // Redeem
@@ -2517,8 +2520,8 @@ function initSettingsPage() {
       earn_bronze_percent: getInt("earn_bronze_percent", 3),
       earn_silver_percent: getInt("earn_silver_percent", 5),
       earn_gold_percent:   getInt("earn_gold_percent",   7),
-      silver_threshold: getInt("silver_threshold", 5000),
-      gold_threshold:   getInt("gold_threshold",   20000),
+      silver_threshold: getInt("silver_threshold", 50000),
+      gold_threshold:   getInt("gold_threshold",   200000),
       welcome_bonus_percent: getInt("welcome_bonus_percent", 0),
 
       redeem_max_percent: getInt("redeem_max_percent", 30),
