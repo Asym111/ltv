@@ -3,8 +3,11 @@ from fastapi import FastAPI
 from app.core.database import Base, engine
 from app import models  # noqa: F401
 from app.api import users_router, transactions_router
+from app.services.scheduler import start_scheduler
 
 app = FastAPI(title="LTV Loyalty Platform")
+
+start_scheduler()
 
 
 @app.on_event("startup")
