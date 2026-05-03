@@ -299,12 +299,13 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 
     # --- WhatsApp уведомление о возврате ---
     if user.phone:
-        try:
-            from app.services.whatsapp import send_message
-            msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
-            send_message(user.phone, msg)
-        except Exception:
-            pass
+    try:
+        from app.services.whatsapp import send_message
+        balances2 = get_balances(db, user_id=user.id)
+        msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
+        send_message(user.phone, msg)
+    except Exception:
+        pass
 
     return out
 
