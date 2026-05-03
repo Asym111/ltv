@@ -1,15 +1,6 @@
 # app/services/whatsapp.py
 """
-GreenAPI WhatsApp клиент.
-Документация: https://green-api.com/docs/
-
-Настройка:
-  1. Зарегистрируйтесь на green-api.com
-  2. Создайте инстанс, получите INSTANCE_ID и API_TOKEN
-  3. Добавьте в .env:
-       GREENAPI_INSTANCE_ID=1234567890
-       GREENAPI_API_TOKEN=your_token_here
-  4. Авторизуйте WhatsApp через QR-код в личном кабинете
+WhatsApp клиент через собственный микросервис ltv-wa-service.
 """
 from __future__ import annotations
 
@@ -23,11 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def _is_configured() -> bool:
-    return bool(settings.GREENAPI_INSTANCE_ID and settings.GREENAPI_API_TOKEN)
+    return bool(settings.WA_SERVICE_URL and settings.WA_INTERNAL_TOKEN)
 
 
-def _base(instance_id: str, token: str) -> str:
-    return f"{settings.GREENAPI_BASE_URL}/waInstance{instance_id}/{{}}/{token}"
+def _headers() -> dict:
+    return {
+        "x-internal-token": settings.WA_INTERNAL_TOKEN or "",
+        "Content-Type": "application/json",
+    }
 
 
 def normalize_phone(phone: str) -> str:
@@ -40,56 +34,77 @@ def normalize_phone(phone: str) -> str:
     return p
 
 
-def to_chat_id(phone: str) -> str:
-    """GreenAPI ожидает формат: 77001234567@c.us"""
-    return normalize_phone(phone) + "@c.us"
-
-
 # ── Status ────────────────────────────────────────────────────
-def get_status() -> dict:
-    """Проверяет состояние инстанса GreenAPI."""
+def get_status(tenant_id: str = "default") -> dict:
+    """Проверяет состояние WhatsApp-сессии через микросервис."""
     if not _is_configured():
-        return {"ok": False, "error": "GreenAPI не настроен. Укажи GREENAPI_INSTANCE_ID и GREENAPI_API_TOKEN в .env"}
+        return {"ok": False, "error": "WA-сервис не настроен. Укажи WA_SERVICE_URL и WA_INTERNAL_TOKEN в .env"}
 
-    iid   = settings.GREENAPI_INSTANCE_ID
-    token = settings.GREENAPI_API_TOKEN
-    url   = f"{settings.GREENAPI_BASE_URL}/waInstance{iid}/getStateInstance/{token}"
+    url = f"{settings.WA_SERVICE_URL}/session/{tenant_id}"
 
     try:
-        r = httpx.get(url, timeout=10)
+        r = httpx.get(url, headers=_headers(), timeout=10)
         data = r.json()
-        state = data.get("stateInstance", "unknown")
-        return {
-            "ok":        state == "authorized",
-            "state":     state,
-            "raw":       data,
-            "instance":  iid,
-        }
+        return {"ok": data.get("connected", False), **data}
     except Exception as e:
-        logger.error(f"GreenAPI status error: {e}")
+        logger.error(f"WA status error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+# ── QR-код ────────────────────────────────────────────────────
+def get_qr(tenant_id: str = "default") -> dict:
+    """Получает QR-код для подключения WhatsApp."""
+    if not _is_configured():
+        return {"ok": False, "error": "WA-сервис не настроен"}
+
+    url = f"{settings.WA_SERVICE_URL}/session/{tenant_id}/qr"
+
+    try:
+        r = httpx.get(url, headers=_headers(), timeout=10)
+        return {"ok": True, **r.json()}
+    except Exception as e:
+        logger.error(f"WA QR error: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+# ── Logout ────────────────────────────────────────────────────
+def logout(tenant_id: str = "default") -> dict:
+    """Отключает WhatsApp-сессию."""
+    if not _is_configured():
+        return {"ok": False, "error": "WA-сервис не настроен"}
+
+    url = f"{settings.WA_SERVICE_URL}/session/{tenant_id}/logout"
+
+    try:
+        r = httpx.post(url, headers=_headers(), timeout=10)
+        return {"ok": True, **r.json()}
+    except Exception as e:
+        logger.error(f"WA logout error: {e}")
         return {"ok": False, "error": str(e)}
 
 
 # ── Send single message ───────────────────────────────────────
-def send_message(phone: str, text: str) -> dict:
+def send_message(phone: str, text: str, tenant_id: str = "default") -> dict:
     """Отправляет текстовое сообщение одному клиенту."""
     if not _is_configured():
-        return {"ok": False, "error": "GreenAPI не настроен"}
+        return {"ok": False, "error": "WA-сервис не настроен"}
 
-    iid   = settings.GREENAPI_INSTANCE_ID
-    token = settings.GREENAPI_API_TOKEN
-    url   = f"{settings.GREENAPI_BASE_URL}/waInstance{iid}/sendMessage/{token}"
-
-    chat_id = to_chat_id(phone)
+    url = f"{settings.WA_SERVICE_URL}/send"
+    phone_clean = normalize_phone(phone)
 
     try:
-        r = httpx.post(url, json={"chatId": chat_id, "message": text}, timeout=15)
+        r = httpx.post(
+            url,
+            headers=_headers(),
+            json={"tenantId": tenant_id, "phone": phone_clean, "message": text},
+            timeout=15,
+        )
         data = r.json()
-        if r.status_code == 200 and data.get("idMessage"):
-            return {"ok": True, "message_id": data["idMessage"], "chat_id": chat_id}
-        return {"ok": False, "error": data.get("message") or str(data), "status": r.status_code}
+        if r.status_code == 200 and data.get("success"):
+            return {"ok": True, "phone": phone_clean}
+        return {"ok": False, "error": data.get("error") or str(data), "status": r.status_code}
     except Exception as e:
-        logger.error(f"GreenAPI send error to {phone}: {e}")
+        logger.error(f"WA send error to {phone}: {e}")
         return {"ok": False, "error": str(e)}
 
 
@@ -105,14 +120,12 @@ def render_template(template: str, variables: dict) -> str:
 
 # ── Send campaign ─────────────────────────────────────────────
 def send_campaign_messages(
-    recipients: list[dict],   # [{"phone": "...", "name": "...", "bonus": 0, ...}]
+    recipients: list[dict],
     template: str,
     dry_run: bool = False,
+    tenant_id: str = "default",
 ) -> dict:
-    """
-    Массовая рассылка по списку получателей.
-    Возвращает статистику: sent, failed, skipped.
-    """
+    """Массовая рассылка по списку получателей."""
     sent    = []
     failed  = []
     skipped = []
@@ -137,9 +150,9 @@ def send_campaign_messages(
             sent.append({"phone": phone, "text": text, "dry_run": True})
             continue
 
-        result = send_message(phone, text)
+        result = send_message(phone, text, tenant_id=tenant_id)
         if result["ok"]:
-            sent.append({"phone": phone, "message_id": result.get("message_id")})
+            sent.append({"phone": phone})
         else:
             failed.append({"phone": phone, "error": result.get("error")})
 
