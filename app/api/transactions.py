@@ -164,6 +164,24 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 
     db.commit()
 
+       # --- WhatsApp уведомление о списании ---
+    if redeemed > 0 and user.phone:
+        try:
+            from app.services.whatsapp import send_message
+            msg = f"Списано {redeemed} бонусов. Баланс: {int(balances2['total'])}."
+            send_message(user.phone, msg)
+        except Exception:
+            pass
+
+    # --- WhatsApp уведомление о начислении ---
+    if earned > 0 and user.phone:
+        try:
+            from app.services.whatsapp import send_message
+            msg = f"Вам начислено {earned} бонусов! Баланс: {int(balances2['total'])}. Спасибо за покупку!"
+            send_message(user.phone, msg)
+        except Exception:
+            pass
+
     out = TransactionOut.model_validate(txn)
     out.user_phone = user.phone
     return out
@@ -276,16 +294,19 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 
     db.commit()
 
-    # 4) Обновляем баланс на пользователе
-    # Обновляем баланс на пользователе (total = available + pending)
-    balances2 = get_balances(db, user_id=user.id)
-    user.bonus_balance = int(balances2["total"])
-    db.commit()
-
     out = TransactionOut.model_validate(tx)
     out.user_phone = user.phone
-    return out
 
+    # --- WhatsApp уведомление о возврате ---
+    if user.phone:
+        try:
+            from app.services.whatsapp import send_message
+            msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
+            send_message(user.phone, msg)
+        except Exception:
+            pass
+
+    return out
 
 @router.get("/by-phone/{user_phone}", response_model=List[TransactionOut])
 def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_db)):
