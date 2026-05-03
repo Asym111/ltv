@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.whatsapp import get_status, send_message, send_campaign_messages, render_template
+from app.services.whatsapp import get_status, get_qr, logout, send_message, send_campaign_messages, render_template
 from app.services.campaigns import get_campaign
 from app.models.campaign import CampaignRecipient
 
@@ -48,6 +48,16 @@ def require_admin(request: Request):
 @router.get("/status")
 def whatsapp_status():
     return get_status()
+
+
+@router.get("/qr")
+def whatsapp_qr():
+    return get_qr()
+
+
+@router.post("/logout")
+def whatsapp_logout():
+    return logout()
 
 
 @router.post("/send")
