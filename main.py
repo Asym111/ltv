@@ -32,7 +32,7 @@ from app.api.accounts_api import router as accounts_router
 from app.api.videos_api import router as videos_router
 from app.api.whatsapp import router as whatsapp_router
 from app.api.reports import router as reports_router
-
+from app.models.invites import router as invites_router
 
 from app.web.admin import router as admin_router
 from app.web.admin_campaigns import router as admin_campaigns_router
@@ -48,7 +48,8 @@ from app.services.scheduler import start_scheduler
 import app.models  # noqa: F401
 import app.models.campaign  # noqa: F401
 import app.models.auth  # noqa: F401
-from app.models.invites import router as invites_router
+import app.models.invite  # noqa: F401
+
 # ═══════════════════════════════════════════════════════════════
 # Запуск фоновых задач
 # ═══════════════════════════════════════════════════════════════
