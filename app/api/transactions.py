@@ -59,9 +59,18 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    role = u.get("role", "")
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail=f"Access denied. Required roles: {allowed}")
+    return u
+
+
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager", "cashier")
     settings = get_settings(db, tenant_id=tenant_id)
 
     user_phone = normalize_phone(payload.user_phone)
@@ -85,7 +94,6 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
         db.commit()
         db.refresh(user)
     else:
-        # Обновляем данные существующего клиента если переданы
         if payload.full_name:
             user.full_name = payload.full_name
         if payload.birth_date:
@@ -96,19 +104,16 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     paid_amount = int(paid_amount or 0)
 
     balances = get_balances(db, user_id=user.id)
-    active_balance = int(balances["available"])  # только активированные — можно списать
+    active_balance = int(balances["available"])
 
     cap = redeem_cap(paid_amount, settings)
     requested = int(payload.redeem_points or 0)
 
-    # Жёсткий двойной лимит: не больше баланса И не больше % от чека
-    # consume_available дополнительно защищён SELECT FOR UPDATE
     redeem_target = clamp(requested, 0, min(active_balance, cap))
     redeemed = consume_available(db, user_id=user.id, to_spend=redeem_target)
 
-    # Защита: если реально списано меньше (race condition) — пересчитываем
     if redeemed > active_balance:
-        redeemed = active_balance  # не может случиться, но страховка
+        redeemed = active_balance
 
     earned = calc_earn(paid_amount=paid_amount, tier=user.tier, settings=settings)
 
@@ -129,15 +134,11 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     db.commit()
     db.refresh(txn)
 
-    # ✅ начисление бонусов привязываем к txn.id
     grant_purchase_bonus(db, user_id=user.id, earn=earned, settings=settings, txn_id=txn.id)
 
     balances2 = get_balances(db, user_id=user.id)
-    # bonus_balance = total (available + pending) — клиент видит все свои бонусы
-    # Списывать можно только available, но показываем всё
     user.bonus_balance = int(balances2["total"])
 
-    # ── Автоапгрейд тира по накопленной сумме (только если настроены уровни) ──
     try:
         tiers_cfg = settings.tiers_json or []
         if tiers_cfg:
@@ -147,24 +148,22 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
                 .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
                 .scalar() or 0
             )
-            # Сортируем по порогу — выбираем наивысший достигнутый
             sorted_tiers = sorted(
                 tiers_cfg, key=lambda t: t.get("spend_from", 0), reverse=True
             )
-            new_tier = "Bronze"  # базовый если ни один порог не достигнут
+            new_tier = "Bronze"
             for t in sorted_tiers:
                 if total_spent >= t.get("spend_from", 0):
                     new_tier = t.get("name", "Bronze")
                     break
             if user.tier != new_tier:
                 user.tier = new_tier
-        # Если уровней нет — тир не меняем (он не используется для начисления)
     except Exception:
         pass
 
     db.commit()
 
-       # --- WhatsApp уведомление о списании ---
+    # --- WhatsApp уведомление о списании ---
     if redeemed > 0 and user.phone:
         try:
             from app.services.whatsapp import send_message
@@ -190,6 +189,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 @router.post("/{tx_id}/refund", response_model=TransactionOut)
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
     settings = get_settings(db, tenant_id=tenant_id)
     now = _now()
 
@@ -208,7 +208,6 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     if tx.paid_amount <= 0:
         raise HTTPException(status_code=400, detail="Invalid paid_amount for refund")
 
-    # Определяем сумму возврата
     if payload.full_refund:
         refund_amount = tx.paid_amount - int(tx.refunded_amount or 0)
     else:
@@ -221,7 +220,6 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     if refund_amount <= 0:
         raise HTTPException(status_code=400, detail="Nothing to refund")
 
-    # Пропорции
     ratio_num = refund_amount
     ratio_den = tx.paid_amount
 
@@ -237,10 +235,9 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 1) Возвращаем списанные бонусы клиенту (redeem_return)
     if redeem_return > 0:
-        available_from = now  # сразу доступно
-        expires_at = now + timedelta(days=int(settings.burn_days))  # тот же burn_days
+        available_from = now
+        expires_at = now + timedelta(days=int(settings.burn_days))
         g = BonusGrant(
             user_id=user.id,
             transaction_id=tx.id,
@@ -254,7 +251,6 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
         db.add(g)
         db.commit()
 
-    # 2) Забираем начисленные за покупку бонусы (earned_revert)
     if earned_revert > 0:
         grant = db.scalar(
             select(BonusGrant).where(
@@ -274,11 +270,9 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
                 grant.status = "expired"
             db.commit()
 
-        # если начисление уже потрачено — докусываем из текущего available (чтобы баланс стал корректным)
         if shortfall > 0:
             consume_available(db, user_id=user.id, to_spend=shortfall)
 
-    # 3) Фиксируем состояние транзакции
     tx.refunded_amount = int(tx.refunded_amount or 0) + refund_amount
     tx.refunded_at = now
     if tx.refunded_amount >= tx.paid_amount:
@@ -286,7 +280,6 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     else:
         tx.status = "partially_refunded"
 
-    # можно сохранить комментарий в tx.comment (без отдельного поля)
     if payload.comment:
         base = (tx.comment or "").strip()
         add = f"[REFUND {refund_amount}] {payload.comment}".strip()
@@ -297,7 +290,7 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     out = TransactionOut.model_validate(tx)
     out.user_phone = user.phone
 
-# --- WhatsApp уведомление о возврате ---
+    # --- WhatsApp уведомление о возврате ---
     if user.phone:
         try:
             from app.services.whatsapp import send_message
@@ -309,9 +302,11 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 
     return out
 
+
 @router.get("/by-phone/{user_phone}", response_model=List[TransactionOut])
 def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager", "cashier")
 
     p = normalize_phone(user_phone)
     user = (
@@ -351,6 +346,7 @@ def list_transactions(
     db: Session = Depends(get_db),
 ):
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager", "cashier")
 
     q = (
         db.query(Transaction, User.phone)
@@ -363,7 +359,6 @@ def list_transactions(
         p = normalize_phone(phone)
         q = q.filter(User.phone == p)
 
-    # Фильтрация по календарным датам (включительно)
     if date_from:
         try:
             dt_from = datetime.strptime(date_from, "%Y-%m-%d")
@@ -373,7 +368,6 @@ def list_transactions(
 
     if date_to:
         try:
-            # Берём конец дня — до 23:59:59
             dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(
                 hour=23, minute=59, second=59
             )

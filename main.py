@@ -31,6 +31,8 @@ from app.api.campaigns import router as campaigns_router
 from app.api.accounts_api import router as accounts_router
 from app.api.videos_api import router as videos_router
 from app.api.whatsapp import router as whatsapp_router
+from app.api.reports import router as reports_router
+from app.api.invites import router as invites_router
 
 from app.web.admin import router as admin_router
 from app.web.admin_campaigns import router as admin_campaigns_router
@@ -40,10 +42,17 @@ from app.web.admin_videos_web import router as admin_videos_router
 from app.web.admin_whatsapp import router as admin_whatsapp_router  
 from app.web.superadmin import router as superadmin_router  
 
+from app.services.scheduler import start_scheduler
+
 # ✅ чтобы SQLAlchemy увидел модели
 import app.models  # noqa: F401
 import app.models.campaign  # noqa: F401
 import app.models.auth  # noqa: F401
+
+# ═══════════════════════════════════════════════════════════════
+# Запуск фоновых задач
+# ═══════════════════════════════════════════════════════════════
+start_scheduler()
 
 app = FastAPI(title="LTV Loyalty Platform")
 
@@ -87,14 +96,6 @@ if IS_PROD:
         raise RuntimeError("Unsafe SESSION_SECRET for production. Set strong random secret (>=32 chars).")
 
 
-# ПАТЧ для main.py — заменить AuthGuardMiddleware.dispatch
-# Добавляет проверку ролей на уровне middleware
-# Вставить ВМЕСТО существующего класса AuthGuardMiddleware
-
-# ПАТЧ для main.py — заменить AuthGuardMiddleware.dispatch
-# Добавляет проверку ролей на уровне middleware
-# Вставить ВМЕСТО существующего класса AuthGuardMiddleware
-
 class AuthGuardMiddleware(BaseHTTPMiddleware):
     # Страницы только для owner
     OWNER_ONLY_PATHS = (
@@ -116,8 +117,6 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Публичные пути — без проверок
-        # В продакшне /docs и /openapi.json закрыты
         docs_open = not IS_PROD
         if (
             path.startswith("/static")
@@ -128,7 +127,6 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
-        # В продакшне /docs закрыты — возвращаем 404
         if IS_PROD and (path.startswith("/docs") or path.startswith("/openapi.json") or path.startswith("/redoc")):
             return JSONResponse({"detail": "Not found"}, status_code=404)
 
@@ -146,7 +144,6 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         else:
             request.state.user = None
 
-        # Проверка авторизации
         if path.startswith("/admin") or path.startswith("/api"):
             if not uid:
                 if path.startswith("/api"):
@@ -159,7 +156,6 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                     status_code=303,
                 )
 
-            # Проверка активности тенанта
             tenant_id = sess.get("tenant_id")
             if tenant_id:
                 from app.models.auth import Tenant
@@ -190,10 +186,8 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                 finally:
                     db.close()
 
-            # ── Проверка ролей ───────────────────────────────
             role = str(sess.get("role") or "staff").lower()
 
-            # owner_only страницы
             if any(path.startswith(p) for p in self.OWNER_ONLY_PATHS):
                 if role != "owner":
                     if path.startswith("/api"):
@@ -201,10 +195,8 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                             {"detail": "Доступ запрещён. Требуется роль: owner"},
                             status_code=403,
                         )
-                    # Для web — редирект на desktop с сообщением
                     return RedirectResponse(url="/admin?e=forbidden", status_code=303)
 
-            # admin+ страницы
             if any(path.startswith(p) for p in self.ADMIN_PLUS_PATHS):
                 if role not in ("owner", "admin"):
                     if path.startswith("/api"):
@@ -216,7 +208,7 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
-# IMPORTANT: SessionMiddleware должен быть outermost (добавлен ПОСЛЕДНИМ)
+
 app.add_middleware(AuthGuardMiddleware)
 
 app.add_middleware(
@@ -276,6 +268,8 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
+app.include_router(invites_router, prefix="/api")
 
 app.include_router(auth_router)
 app.include_router(admin_router)
@@ -287,6 +281,7 @@ app.include_router(admin_videos_router)
 app.include_router(whatsapp_router, prefix="/api")
 app.include_router(admin_whatsapp_router)
 app.include_router(superadmin_router)
+
 
 @app.get("/health")
 def health():

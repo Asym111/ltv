@@ -38,31 +38,35 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
-def require_admin(request: Request):
+def require_role(request: Request, *allowed: str):
     u = getattr(request.state, "user", None) or {}
-    if u.get("role") not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only owner/admin")
+    role = u.get("role", "")
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail=f"Access denied. Required roles: {allowed}")
     return u
 
 
 @router.get("/status")
-def whatsapp_status():
+def whatsapp_status(request: Request):
+    require_role(request, "owner", "admin", "manager")
     return get_status()
 
 
 @router.get("/qr")
-def whatsapp_qr():
+def whatsapp_qr(request: Request):
+    require_role(request, "owner", "admin")
     return get_qr()
 
 
 @router.post("/logout")
-def whatsapp_logout():
+def whatsapp_logout(request: Request):
+    require_role(request, "owner", "admin")
     return logout()
 
 
 @router.post("/send")
 def whatsapp_send_one(payload: SendOneIn, request: Request):
-    require_admin(request)
+    require_role(request, "owner", "admin", "manager")
     result = send_message(payload.phone, payload.message)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Ошибка отправки"))
@@ -75,7 +79,7 @@ def whatsapp_send_campaign(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_admin(request)
+    require_role(request, "owner", "admin", "manager")
     tenant_id = must_tenant_id(request)
 
     campaign = get_campaign(db, payload.campaign_id, tenant_id=tenant_id)
@@ -109,13 +113,15 @@ def whatsapp_send_campaign(
 
 
 @router.post("/preview-template")
-def whatsapp_preview_template(payload: TemplatePreviewIn):
+def whatsapp_preview_template(payload: TemplatePreviewIn, request: Request):
+    require_role(request, "owner", "admin", "manager")
     sample = {"name": "Айгуль", "phone": "77001234567", "bonus": "3000", **payload.sample}
     return {"preview": render_template(payload.template, sample)}
 
 
 @router.get("/templates")
-def whatsapp_templates():
+def whatsapp_templates(request: Request):
+    require_role(request, "owner", "admin", "manager", "cashier")
     return {"templates": BUILTIN_TEMPLATES}
 
 

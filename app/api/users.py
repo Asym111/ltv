@@ -39,9 +39,18 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    role = u.get("role", "")
+    if role not in allowed:
+        raise HTTPException(status_code=403, detail=f"Access denied. Required roles: {allowed}")
+    return u
+
+
 @router.get("/", response_model=list[UserOut])
 def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]:
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
     users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.id.desc()).all()
     return [UserOut.model_validate(u) for u in users]
 
@@ -49,6 +58,7 @@ def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]
 @router.post("", response_model=UserOut)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db)) -> UserOut:
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
     phone = normalize_phone(payload.phone)
     if not phone:
         raise HTTPException(status_code=400, detail="Invalid phone")
@@ -72,6 +82,7 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)) -> UserOut:
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
     user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -88,6 +99,21 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     return UserOut.model_validate(user)
 
 
+# ─── УДАЛЕНИЕ ──────────────────────────────────────────────────────────────────
+
+@router.delete("/{user_id}")
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    """Удаление клиента. Только owner/admin."""
+    tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin")
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    db.delete(user)
+    db.commit()
+    return {"ok": True, "deleted": user_id}
+
+
 # ─── ЭКСПОРТ ──────────────────────────────────────────────────────────────────
 
 @router.get("/export/excel")
@@ -97,8 +123,8 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     from openpyxl.styles import Font, PatternFill, Alignment
 
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
 
-    # Клиенты + агрегаты транзакций одним запросом
     rows = (
         db.query(
             User,
@@ -116,7 +142,6 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     ws = wb.active
     ws.title = "Клиенты"
 
-    # Заголовки
     headers = ["ID", "Телефон", "Имя", "Дата рождения", "Уровень", "Бонусный баланс", "Сумма покупок", "Кол-во покупок"]
     header_fill = PatternFill("solid", start_color="1E3A5F")
     header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
@@ -129,7 +154,6 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
 
     ws.row_dimensions[1].height = 22
 
-    # Данные
     for row_idx, (user, total_spent, tx_count) in enumerate(rows, 2):
         birth = user.birth_date.strftime("%d.%m.%Y") if user.birth_date else ""
         ws.cell(row=row_idx, column=1, value=user.id)
@@ -141,18 +165,15 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
         ws.cell(row=row_idx, column=7, value=int(total_spent))
         ws.cell(row=row_idx, column=8, value=int(tx_count))
 
-        # Чередование строк
         if row_idx % 2 == 0:
             row_fill = PatternFill("solid", start_color="F0F4FA")
             for col in range(1, 9):
                 ws.cell(row=row_idx, column=col).fill = row_fill
 
-    # Ширина столбцов
     col_widths = [8, 18, 28, 16, 12, 18, 18, 16]
     for col, width in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = width
 
-    # Лист-инструкция для импорта
     ws2 = wb.create_sheet("Шаблон для импорта")
     tpl_headers = ["Телефон *", "Имя *", "Дата рождения (ДД.ММ.ГГГГ)", "Уровень (Bronze/Silver/Gold)"]
     tpl_fill = PatternFill("solid", start_color="2E7D32")
@@ -168,7 +189,6 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     ws2.column_dimensions["C"].width = 26
     ws2.column_dimensions["D"].width = 26
 
-    # Пример строки
     ws2.cell(row=2, column=1, value="77001234567")
     ws2.cell(row=2, column=2, value="Айгуль Иванова")
     ws2.cell(row=2, column=3, value="15.03.1990")
@@ -196,21 +216,17 @@ def import_users_excel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    """
-    Импорт клиентов из Excel.
-    Обязательные колонки: Телефон, Имя
-    Необязательные: Дата рождения, Уровень
-    Дубли по телефону — обновляем имя/дату рождения если переданы.
-    """
+    """Импорт клиентов из Excel."""
     import openpyxl
 
     tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin", "manager")
 
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Только .xlsx файлы")
 
     content = file.file.read()
-    if len(content) > 10 * 1024 * 1024:  # 10 MB лимит
+    if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Файл слишком большой (макс 10 МБ)")
 
     try:
@@ -218,7 +234,6 @@ def import_users_excel(
     except Exception:
         raise HTTPException(status_code=400, detail="Не удалось открыть файл. Проверьте формат.")
 
-    # Ищем первый лист с данными (не шаблон)
     ws = None
     for sheet_name in wb.sheetnames:
         if "шаблон" not in sheet_name.lower() and "template" not in sheet_name.lower():
@@ -231,7 +246,6 @@ def import_users_excel(
     if not rows:
         raise HTTPException(status_code=400, detail="Файл пустой")
 
-    # Определяем индексы колонок по заголовкам (первая строка)
     header_row = [str(h or "").strip().lower() for h in rows[0]]
 
     def find_col(*keywords) -> int | None:
@@ -247,9 +261,9 @@ def import_users_excel(
     col_tier  = find_col("уровень", "tier", "bronze", "статус")
 
     if col_phone is None:
-        raise HTTPException(status_code=400, detail="Колонка 'Телефон' не найдена. Проверьте заголовки.")
+        raise HTTPException(status_code=400, detail="Колонка 'Телефон' не найдена.")
     if col_name is None:
-        raise HTTPException(status_code=400, detail="Колонка 'Имя' не найдена. Проверьте заголовки.")
+        raise HTTPException(status_code=400, detail="Колонка 'Имя' не найдена.")
 
     created = 0
     updated = 0
@@ -259,11 +273,9 @@ def import_users_excel(
     VALID_TIERS = {"Bronze", "Silver", "Gold"}
 
     for row_num, row in enumerate(rows[1:], start=2):
-        # Пропускаем пустые строки
         if all(v is None or str(v).strip() == "" for v in row):
             continue
 
-        # Телефон
         raw_phone = str(row[col_phone] or "").strip()
         if not raw_phone:
             skipped += 1
@@ -274,14 +286,12 @@ def import_users_excel(
             skipped += 1
             continue
 
-        # Имя
         name = str(row[col_name] or "").strip() if col_name is not None else ""
         if not name:
             errors.append(f"Строка {row_num}: имя пустое, пропускаем")
             skipped += 1
             continue
 
-        # Дата рождения
         birth: date | None = None
         if col_birth is not None and row[col_birth]:
             raw_b = str(row[col_birth]).strip()
@@ -291,28 +301,24 @@ def import_users_excel(
                     break
                 except ValueError:
                     pass
-            # Если openpyxl вернул date/datetime объект
             if birth is None and hasattr(row[col_birth], "year"):
                 try:
                     birth = row[col_birth].date() if hasattr(row[col_birth], "date") else row[col_birth]
                 except Exception:
                     pass
 
-        # Уровень
         tier = "Bronze"
         if col_tier is not None and row[col_tier]:
             t = str(row[col_tier]).strip().capitalize()
             if t in VALID_TIERS:
                 tier = t
 
-        # Проверяем дубль
         existing = db.query(User).filter(
             User.tenant_id == tenant_id,
             User.phone == phone,
         ).first()
 
         if existing:
-            # Обновляем только если переданы данные
             changed = False
             if name and existing.full_name != name:
                 existing.full_name = name
@@ -347,6 +353,6 @@ def import_users_excel(
         "created": created,
         "updated": updated,
         "skipped": skipped,
-        "errors": errors[:20],  # первые 20 ошибок
+        "errors": errors[:20],
         "total_processed": created + updated + skipped,
     }
