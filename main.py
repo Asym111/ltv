@@ -51,6 +51,8 @@ import app.models.campaign  # noqa: F401
 import app.models.auth  # noqa: F401
 import app.models.invite  # noqa: F401
 
+from app.models.auth import AuthUser
+
 # ═══════════════════════════════════════════════════════════════
 # Запуск фоновых задач
 # ═══════════════════════════════════════════════════════════════
@@ -167,6 +169,24 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         if uid and sess.get("uid"):
             try:
                 request.session["_last_activity"] = int(time.time())
+            except Exception:
+                pass
+
+        # Проверка session_version (logout из всех устройств)
+        if uid and sess.get("uid"):
+            try:
+                session_ver = sess.get("session_version")
+                if session_ver is not None:
+                    db = SessionLocal()
+                    try:
+                        user = db.query(AuthUser).filter(AuthUser.id == int(uid)).first()
+                        if user and user.session_version != session_ver:
+                            request.session.clear()
+                            if path.startswith("/api"):
+                                return JSONResponse({"detail": "Session expired. Please login again."}, status_code=401)
+                            return RedirectResponse(url="/auth?e=expired", status_code=303)
+                    finally:
+                        db.close()
             except Exception:
                 pass
 
