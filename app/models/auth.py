@@ -41,6 +41,7 @@ class AuthUser(Base):
     password_hash = Column(String(255), nullable=False)
 
     is_active = Column(Boolean, default=True, nullable=False)
+    session_version = Column(Integer, default=1, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
