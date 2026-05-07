@@ -163,6 +163,13 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         else:
             request.state.user = None
 
+        # Обновление сессии при каждом запросе (refresh token)
+        if uid and sess.get("uid"):
+            try:
+                request.session["_last_activity"] = int(time.time())
+            except Exception:
+                pass
+
         if path.startswith("/admin") or path.startswith("/api"):
             if not uid:
                 if path.startswith("/api"):
