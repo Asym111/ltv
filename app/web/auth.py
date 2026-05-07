@@ -127,14 +127,15 @@ def login_post(
         user.last_login_at = datetime.utcnow()
         db.commit()
 
-        # ✅ Сохраняем сессию + CSRF токен
+        # ✅ Сохраняем сессию + CSRF токен + session_version
         request.session.clear()
-        request.session["uid"]         = user.id
-        request.session["phone"]       = user.phone
-        request.session["name"]        = user.name
-        request.session["role"]        = user.role
-        request.session["tenant_id"]   = user.tenant_id
-        request.session["csrf_token"]  = secrets.token_hex(32)
+        request.session["uid"]              = user.id
+        request.session["phone"]            = user.phone
+        request.session["name"]             = user.name
+        request.session["role"]             = user.role
+        request.session["tenant_id"]        = user.tenant_id
+        request.session["csrf_token"]       = secrets.token_hex(32)
+        request.session["session_version"]  = user.session_version
         tenant = db.query(TenantModel).filter(TenantModel.id == user.tenant_id).first()
         request.session["tenant_name"] = tenant.name if tenant else ""
 
@@ -152,5 +153,30 @@ def logout(request: Request, next: str | None = None):
     request.session.clear()
     return RedirectResponse(
         url=f"/auth?next={quote(next or '/admin')}&i=Вы+вышли+из+системы",
+        status_code=303,
+    )
+
+
+# ── Logout со всех устройств ──────────────────────────────────
+@router.post("/logout-all")
+@router.post("/logout-all/", include_in_schema=False)
+def logout_all(request: Request):
+    """Сбрасывает все сессии пользователя."""
+    uid = request.session.get("uid")
+    if not uid:
+        return RedirectResponse(url="/auth?e=disabled", status_code=303)
+
+    db = SessionLocal()
+    try:
+        user = db.query(AuthUser).filter(AuthUser.id == int(uid)).first()
+        if user:
+            user.session_version = (user.session_version or 0) + 1
+            db.commit()
+    finally:
+        db.close()
+
+    request.session.clear()
+    return RedirectResponse(
+        url="/auth?i=Вы+вышли+из+всех+устройств",
         status_code=303,
     )
