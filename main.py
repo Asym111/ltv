@@ -1,4 +1,5 @@
 # main.py
+import logging
 import os
 from datetime import datetime
 from urllib.parse import quote
@@ -14,6 +15,11 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
 from collections import defaultdict
 import time
+
+# Audit log
+logging.basicConfig(level=logging.INFO)
+audit_logger = logging.getLogger("audit")
+audit_logger.setLevel(logging.INFO)
 
 # Простой in-memory rate limit для /auth (brute-force защита)
 _auth_attempts: dict = defaultdict(list)  # ip -> [timestamps]
@@ -187,6 +193,17 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                             return RedirectResponse(url="/auth?e=expired", status_code=303)
                     finally:
                         db.close()
+            except Exception:
+                pass
+
+        # Audit log — логирование доступа к данным
+        if path.startswith("/api") and uid:
+            try:
+                audit_logger.info(
+                    f"user_id={uid} role={sess.get('role')} tenant={sess.get('tenant_id')} "
+                    f"method={request.method} path={path} "
+                    f"ip={request.client.host if request.client else 'unknown'}"
+                )
             except Exception:
                 pass
 
