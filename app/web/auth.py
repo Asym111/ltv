@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -126,13 +127,14 @@ def login_post(
         user.last_login_at = datetime.utcnow()
         db.commit()
 
-        # ✅ Сохраняем сессию
+        # ✅ Сохраняем сессию + CSRF токен
         request.session.clear()
-        request.session["uid"]       = user.id
-        request.session["phone"]     = user.phone
-        request.session["name"]      = user.name
-        request.session["role"]      = user.role
-        request.session["tenant_id"] = user.tenant_id
+        request.session["uid"]         = user.id
+        request.session["phone"]       = user.phone
+        request.session["name"]        = user.name
+        request.session["role"]        = user.role
+        request.session["tenant_id"]   = user.tenant_id
+        request.session["csrf_token"]  = secrets.token_hex(32)
         tenant = db.query(TenantModel).filter(TenantModel.id == user.tenant_id).first()
         request.session["tenant_name"] = tenant.name if tenant else ""
 
