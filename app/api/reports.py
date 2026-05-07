@@ -12,6 +12,7 @@ from sqlalchemy import func, extract
 from openpyxl import Workbook
 
 from app.core.database import get_db
+from app.core.tenant_utils import get_tenant_ids_for_user
 from app.models.bonus_grant import BonusGrant
 from app.models.user import User
 from app.models.transaction import Transaction
@@ -165,3 +166,77 @@ def transactions_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ── Общая аналитика по всем филиалам (super-tenant) ──────────
+@router.get("/super/overview")
+def super_tenant_overview(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Общая аналитика по всем тенантам группы. Доступно только owner."""
+    tenant_ids = get_tenant_ids_for_user(request, db)
+    if len(tenant_ids) <= 1:
+        raise HTTPException(status_code=400, detail="No branches found. Create child tenants first.")
+
+    branches = []
+    total_users = 0
+    total_transactions = 0
+    total_revenue = 0
+    total_bonus_issued = 0
+    total_bonus_burned = 0
+
+    for tid in tenant_ids:
+        user_count = (
+            db.query(func.count(User.id))
+            .filter(User.tenant_id == tid)
+            .scalar() or 0
+        )
+        tx_count = (
+            db.query(func.count(Transaction.id))
+            .filter(Transaction.tenant_id == tid)
+            .scalar() or 0
+        )
+        revenue = (
+            db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
+            .filter(Transaction.tenant_id == tid)
+            .scalar() or 0
+        )
+        bonus_issued = (
+            db.query(func.coalesce(func.sum(BonusGrant.amount), 0))
+            .filter(BonusGrant.tenant_id == tid)
+            .scalar() or 0
+        )
+        bonus_burned = (
+            db.query(func.coalesce(func.sum(BonusGrant.amount - BonusGrant.remaining), 0))
+            .filter(BonusGrant.tenant_id == tid)
+            .filter(BonusGrant.status == "expired")
+            .scalar() or 0
+        )
+
+        branches.append({
+            "tenant_id": tid,
+            "users": user_count,
+            "transactions": int(tx_count),
+            "revenue": int(revenue),
+            "bonus_issued": int(bonus_issued),
+            "bonus_burned": int(bonus_burned),
+        })
+
+        total_users += user_count
+        total_transactions += int(tx_count)
+        total_revenue += int(revenue)
+        total_bonus_issued += int(bonus_issued)
+        total_bonus_burned += int(bonus_burned)
+
+    return {
+        "total": {
+            "branches": len(branches),
+            "users": total_users,
+            "transactions": total_transactions,
+            "revenue": total_revenue,
+            "bonus_issued": total_bonus_issued,
+            "bonus_burned": total_bonus_burned,
+        },
+        "branches": branches,
+    }
