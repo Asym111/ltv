@@ -225,6 +225,14 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                         )
                     return RedirectResponse(url="/admin?e=forbidden", status_code=303)
 
+        # CSRF защита для мутирующих запросов
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            if path.startswith("/api"):
+                csrf_header = request.headers.get("X-CSRF-Token", "")
+                csrf_session = sess.get("csrf_token", "")
+                if not csrf_session or csrf_header != csrf_session:
+                    return JSONResponse({"detail": "CSRF token mismatch"}, status_code=403)
+
         return await call_next(request)
 
 
