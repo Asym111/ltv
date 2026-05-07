@@ -9,6 +9,7 @@ load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse, JSONResponse
 from collections import defaultdict
@@ -56,6 +57,23 @@ import app.models.invite  # noqa: F401
 start_scheduler()
 
 app = FastAPI(title="LTV Loyalty Platform")
+
+# -------------------------
+# CORS
+# -------------------------
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").strip()
+if ALLOWED_ORIGINS:
+    origins = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+else:
+    origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -------------------------
 # DB init
