@@ -12,6 +12,7 @@ class Tenant(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
     parent_tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    is_setup_completed = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
 
     # ✅ Дата окончания доступа (подписка). None = бессрочно.
