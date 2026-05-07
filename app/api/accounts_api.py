@@ -30,7 +30,7 @@ class AccountUserOut(BaseModel):
 class AccountUserCreate(BaseModel):
     phone: str = Field(..., min_length=5, max_length=32)
     name: str = Field(..., min_length=1, max_length=120)
-    role: str = Field(default="staff")  # staff / admin / owner
+    role: str = Field(default="staff")
     password: str = Field(..., min_length=4, max_length=128)
 
 
@@ -46,6 +46,7 @@ class TenantProfileOut(BaseModel):
     id: int
     name: str
     is_active: bool
+    is_setup_completed: bool
     access_until: Optional[datetime] = None
     created_at: datetime
 
@@ -108,6 +109,33 @@ def update_tenant_profile(
     return TenantProfileOut.model_validate(t)
 
 
+# ── Setup Wizard ───────────────────────────────────────────
+
+@router.get("/setup/status")
+def get_setup_status(request: Request, db: Session = Depends(get_db)):
+    """Проверяет, завершена ли первичная настройка тенанта."""
+    tenant_id = must_tenant_id(request)
+    t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {"is_setup_completed": t.is_setup_completed}
+
+
+@router.post("/setup/complete")
+def complete_setup(request: Request, db: Session = Depends(get_db)):
+    """Помечает настройку тенанта как завершённую."""
+    must_role(request, "owner", "admin")
+    tenant_id = must_tenant_id(request)
+    t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    t.is_setup_completed = True
+    db.commit()
+    return {"ok": True, "message": "Setup completed"}
+
+
+# ── Users ──────────────────────────────────────────────────
+
 @router.get("/users", response_model=List[AccountUserOut])
 def list_users(request: Request, db: Session = Depends(get_db)):
     must_role(request, "owner", "admin")
@@ -131,7 +159,6 @@ def create_user(
     tenant_id = must_tenant_id(request)
     current_role = (getattr(request.state, "user", None) or {}).get("role")
 
-    # staff не может создавать owner
     role = payload.role if payload.role in ALLOWED_ROLES else "staff"
     if role == "owner" and current_role != "owner":
         raise HTTPException(status_code=403, detail="Only owner can create another owner")
@@ -178,7 +205,6 @@ def update_user(
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Нельзя менять роль owner если ты не owner
     if payload.role and payload.role == "owner" and current_user.get("role") != "owner":
         raise HTTPException(status_code=403, detail="Only owner can assign owner role")
 
@@ -187,7 +213,6 @@ def update_user(
     if payload.role is not None and payload.role in ALLOWED_ROLES:
         u.role = payload.role
     if payload.is_active is not None:
-        # Нельзя деактивировать самого себя
         if u.id == current_user.get("id") and not payload.is_active:
             raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
         u.is_active = payload.is_active
