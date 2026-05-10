@@ -17,6 +17,7 @@ def send_birthday_greetings():
     db: Session = SessionLocal()
     try:
         today = date.today()
+        now_dt = datetime.now()
         users = (
             db.query(User)
             .filter(
@@ -30,10 +31,38 @@ def send_birthday_greetings():
             if not user.phone:
                 continue
             try:
-                msg = f"С Днём рождения, {user.full_name or 'клиент'}! 🎂 Ваш баланс: {int(user.bonus_balance or 0)} бонусов."
+                from app.services.loyalty_engine import get_settings
+                from app.core.config import settings as app_settings
+
+                settings = get_settings(db, tenant_id=user.tenant_id)
+                amount = int(settings.bday_bonus_amount or 0)
+
+                if amount > 0:
+                    burn_days = max(1, int(settings.bday_bonus_burn_days or 14))
+                    expires_at = now_dt + timedelta(days=burn_days)
+
+                    grant = BonusGrant(
+                        user_id=user.id,
+                        amount=amount,
+                        remaining=amount,
+                        status="available",
+                        available_from=now_dt,
+                        expires_at=expires_at,
+                        source="birthday",
+                    )
+                    db.add(grant)
+                    db.commit()
+
+                name = user.full_name or "клиент"
+                msg = app_settings.BDAY_MESSAGE_TEMPLATE.format(
+                    name=name,
+                    amount=amount,
+                    expires_at=(now_dt + timedelta(days=max(1, int(settings.bday_bonus_burn_days or 14)))).strftime("%d.%m.%Y"),
+                )
                 send_message(user.phone, msg)
+
             except Exception:
-                pass
+                db.rollback()
     finally:
         db.close()
 
@@ -66,7 +95,31 @@ def send_burn_reminders():
         db.close()
 
 
+def process_pending_bonuses():
+    """Ежедневный перевод pending бонусов в available."""
+    db: Session = SessionLocal()
+    try:
+        now = datetime.now()
+        grants = (
+            db.query(BonusGrant)
+            .filter(
+                BonusGrant.status == "pending",
+                BonusGrant.remaining > 0,
+                BonusGrant.available_from <= now,
+            )
+            .all()
+        )
+        for grant in grants:
+            grant.status = "available"
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 def start_scheduler():
+    scheduler.add_job(process_pending_bonuses, 'cron', hour=3, minute=0, id='process_pending')
     scheduler.add_job(send_birthday_greetings, 'cron', hour=4, minute=0, id='birthday')
     scheduler.add_job(send_burn_reminders, 'cron', hour=5, minute=0, id='burn')
     scheduler.start()
