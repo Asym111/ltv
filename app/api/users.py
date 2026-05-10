@@ -11,6 +11,7 @@ from sqlalchemy import func
 from app.core.database import get_db
 from app.models.user import User
 from app.models.transaction import Transaction
+from app.models.bonus_grant import BonusGrant
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -112,6 +113,86 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     db.delete(user)
     db.commit()
     return {"ok": True, "deleted": user_id}
+
+
+# ─── GDPR / Анонимизация ───────────────────────────────────────────────────────
+
+@router.post("/gdpr/anonymize")
+def anonymize_user_by_phone(
+    request: Request,
+    phone: str,
+    db: Session = Depends(get_db),
+):
+    """
+    GDPR-совместимая анонимизация клиента по номеру телефона.
+    Персональные данные заменяются на анонимные, транзакции сохраняются.
+    Доступ: owner, admin. Также может использоваться для самоудаления.
+    """
+    tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin")
+
+    phone_clean = normalize_phone(phone)
+    user = db.query(User).filter(
+        User.tenant_id == tenant_id,
+        User.phone == phone_clean,
+    ).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Анонимизируем данные
+    anon_id = f"anon_{user.id}"
+    user.phone = anon_id
+    user.full_name = "Анонимный клиент"
+    user.birth_date = None
+    user.bonus_balance = 0
+    user.tier = "Bronze"
+
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Client data anonymized. Transactions preserved.",
+        "user_id": user.id,
+    }
+
+
+@router.delete("/gdpr/delete")
+def gdpr_delete_user(
+    request: Request,
+    phone: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Полное удаление клиента по GDPR-запросу.
+    Удаляются все данные: клиент, его транзакции, бонусы.
+    Доступ: owner, admin.
+    """
+    tenant_id = must_tenant_id(request)
+    require_role(request, "owner", "admin")
+
+    phone_clean = normalize_phone(phone)
+    user = db.query(User).filter(
+        User.tenant_id == tenant_id,
+        User.phone == phone_clean,
+    ).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_id = user.id
+
+    # Удаляем связанные данные
+    db.query(Transaction).filter(Transaction.user_id == user_id).delete()
+    db.query(BonusGrant).filter(BonusGrant.user_id == user_id).delete()
+    db.delete(user)
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Client and all associated data deleted (GDPR compliant).",
+        "user_id": user_id,
+    }
 
 
 # ─── ЭКСПОРТ ──────────────────────────────────────────────────────────────────
