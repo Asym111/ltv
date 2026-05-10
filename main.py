@@ -16,6 +16,8 @@ from starlette.responses import RedirectResponse, JSONResponse
 from collections import defaultdict
 import time
 
+import sentry_sdk
+
 # Audit log
 logging.basicConfig(level=logging.INFO)
 audit_logger = logging.getLogger("audit")
@@ -67,6 +69,21 @@ start_scheduler()
 app = FastAPI(title="LTV Loyalty Platform")
 
 # -------------------------
+# Sentry
+# -------------------------
+def _is_prod() -> bool:
+    env = (os.getenv("ENV", "") or "").strip().lower()
+    return env in {"prod", "production"} or bool(os.getenv("RENDER"))
+
+IS_PROD = _is_prod()
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN", ""),
+    environment=os.getenv("ENV", "development"),
+    traces_sample_rate=0.3 if IS_PROD else 1.0,
+)
+
+# -------------------------
 # CORS
 # -------------------------
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").strip()
@@ -108,13 +125,6 @@ def _int_env(name: str, default: int) -> int:
 AUTH_REMEMBER_DAYS = _int_env("AUTH_REMEMBER_DAYS", 30)
 SESSION_SECRET = (os.getenv("SESSION_SECRET", "") or "").strip()
 
-
-def _is_prod() -> bool:
-    env = (os.getenv("ENV", "") or "").strip().lower()
-    return env in {"prod", "production"} or bool(os.getenv("RENDER"))
-
-
-IS_PROD = _is_prod()
 COOKIE_SECURE = (os.getenv("COOKIE_SECURE", "1" if IS_PROD else "0") or ("1" if IS_PROD else "0")).strip() == "1"
 
 if IS_PROD:
