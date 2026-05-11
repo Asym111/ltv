@@ -149,7 +149,7 @@ async function addVideo() {
 
   const r = await fetch('/api/videos/', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token': window.__CSRF_TOKEN__ || ''},
     body: JSON.stringify({youtube_url:url, title, category:cat, tags:tags||null, description:desc||null, sort_order:0})
   });
   const j = await r.json();
@@ -161,7 +161,7 @@ async function addVideo() {
 
 async function deleteVideo(id) {
   if (!confirm('Удалить видео?')) return;
-  const r = await fetch(`/api/videos/${id}`, {method:'DELETE'});
+  const r = await fetch(`/api/videos/${id}`, {method:'DELETE', headers: {'X-CSRF-Token': window.__CSRF_TOKEN__ || ''}});
   if (r.ok) {
     document.getElementById(`vc-${id}`)?.remove();
   }

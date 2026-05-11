@@ -132,6 +132,27 @@ async function apiPost(url, data) {
   return out;
 }
 
+async function apiPut(url, data) {
+  const r = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
+    body: JSON.stringify(data),
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out?.detail || `${r.status} ${r.statusText}`);
+  return out;
+}
+
+async function apiDelete(url) {
+  const r = await fetch(url, {
+    method: "DELETE",
+    headers: { Accept: "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out?.detail || `${r.status} ${r.statusText}`);
+  return out;
+}
+
 // =========================
 // Execute recommendation (SERVER-validated)
 // =========================
@@ -2584,15 +2605,7 @@ function initSettingsPage() {
 
     try {
       const payload = readForm();
-      const data = await fetch("/api/settings/", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
-      }).then(async r => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.detail || `${r.status}`);
-        return j;
-      });
+      const data = await apiPut("/api/settings/", payload);
 
       fillForm(data);
       uiToast("Настройки сохранены", "success");
@@ -2667,12 +2680,7 @@ function initAccountsPage() {
     const name = (v("accTenantNameInput")?.value || "").trim();
     if (!name) { uiToast("Введите название", "warning"); return; }
     try {
-      const data = await apiPost("/api/accounts/profile", { name }); // PUT через fetch
-      await fetch("/api/accounts/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      }).then(r => { if (!r.ok) throw new Error("Ошибка"); return r.json(); });
+      await apiPut("/api/accounts/profile", { name });
       if (v("accTenantName")) v("accTenantName").textContent = name;
       uiToast("Название обновлено", "success");
     } catch (e) {
@@ -2793,12 +2801,7 @@ function initAccountsPage() {
   window.accDeleteUser = async function(userId, name) {
     if (!confirm(`Удалить пользователя «${name}»? Это действие необратимо.`)) return;
     try {
-      await fetch(`/api/accounts/users/${userId}`, { method: "DELETE" })
-        .then(async r => {
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(j?.detail || "Ошибка");
-          return j;
-        });
+      await apiDelete(`/api/accounts/users/${userId}`);
       uiToast("Пользователь удалён", "success");
       loadUsers();
     } catch (e) {
@@ -2830,15 +2833,7 @@ function initAccountsPage() {
     }
 
     try {
-      await fetch("/api/accounts/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, password: pwd, role }),
-      }).then(async r => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.detail || "Ошибка");
-        return j;
-      });
+      await apiPost("/api/accounts/users", { name, phone, password: pwd, role });
 
       v("accCreateBox")?.classList.add("d-none");
       ["accNewName","accNewPhone","accNewPwdCreate"].forEach(id => { const el = v(id); if (el) el.value = ""; });
@@ -3293,15 +3288,7 @@ function initWhatsappPage() {
     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Отправка…`;
 
     try {
-      await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, message }),
-      }).then(async r => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.detail || "Ошибка");
-        return j;
-      });
+      await apiPost("/api/whatsapp/send", { phone, message });
       showOk(v("waSendOk"), "✓ Сообщение отправлено!");
       uiToast("Сообщение отправлено", "success");
     } catch (e) {
@@ -3344,11 +3331,7 @@ function initWhatsappPage() {
     if (!tpl) { uiToast("Введите шаблон", "warning"); return; }
 
     try {
-      const data = await fetch("/api/whatsapp/preview-template", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: tpl }),
-      }).then(r => r.json());
+      const data = await apiPost("/api/whatsapp/preview-template", { template: tpl });
 
       const box = v("waPreviewBox");
       if (box) box.textContent = data.preview || tpl;
@@ -3372,15 +3355,7 @@ function initWhatsappPage() {
     if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>`; }
 
     try {
-      const res = await fetch("/api/whatsapp/send-campaign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaign_id, template, dry_run }),
-      }).then(async r => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.detail || "Ошибка");
-        return j;
-      });
+      const res = await apiPost("/api/whatsapp/send-campaign", { campaign_id, template, dry_run });
 
       renderResult(res);
       const msg = dry_run
