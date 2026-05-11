@@ -124,7 +124,7 @@ async function apiGet(url) {
 async function apiPost(url, data) {
   const r = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
     body: JSON.stringify(data),
   });
   const out = await r.json().catch(() => ({}));

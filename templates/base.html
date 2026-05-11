@@ -266,6 +266,7 @@
   window.__USER_ROLE__  = _b.userRole  || "staff";
   window.__USER_PHONE__ = _b.userPhone || "";
   window.__USER_NAME__  = _b.userName  || "";
+  window.__CSRF_TOKEN__ = "{{ request.session.get('csrf_token', '') }}";
 </script>
 <script src="/static/js/admin.js?v={{ _v }}"></script>
 {% block scripts %}{% endblock %}
