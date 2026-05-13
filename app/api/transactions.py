@@ -334,7 +334,7 @@ def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_d
     out: List[TransactionOut] = []
     for t in rows:
         item = TransactionOut.model_validate(t)
-        item.user_phone = user.phone
+        item.user_phone = decrypt_field(user.phone) or user.phone
         out.append(item)
     return out
 
@@ -384,8 +384,8 @@ def list_transactions(
 
     out: List[TransactionOut] = []
     for t, user_phone in rows:
-        item = TransactionOut.model_validate(t)
-        item.user_phone = user_phone or ""
-        out.append(item)
+    item = TransactionOut.model_validate(t)
+    item.user_phone = decrypt_field(user_phone) or user_phone or ""
+    out.append(item)
 
     return out
