@@ -362,7 +362,8 @@ def list_transactions(
 
     if phone:
         p = normalize_phone(phone)
-        q = q.filter(User.phone == p)
+        p_hash = hashlib.sha256(p.encode()).hexdigest()
+        q = q.filter(User.phone_hash == p_hash)
 
     if date_from:
         try:
