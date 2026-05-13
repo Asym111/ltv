@@ -384,8 +384,8 @@ def list_transactions(
 
     out: List[TransactionOut] = []
     for t, user_phone in rows:
-    item = TransactionOut.model_validate(t)
-    item.user_phone = decrypt_field(user_phone) or user_phone or ""
-    out.append(item)
+        item = TransactionOut.model_validate(t)
+        item.user_phone = decrypt_field(user_phone) or user_phone or ""
+        out.append(item)
 
     return out
