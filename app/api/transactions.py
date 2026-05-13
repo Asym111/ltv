@@ -9,9 +9,11 @@ from datetime import datetime, timedelta, timezone
 # UTC+5 Алматы
 _ALMATY = timezone(timedelta(hours=5))
 
+
 def _now() -> datetime:
     """Текущее время Алматы (UTC+5), naive для БД."""
     return datetime.now(_ALMATY).replace(tzinfo=None)
+
 
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
@@ -172,8 +174,9 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     if redeemed > 0 and user.phone:
         try:
             from app.services.whatsapp import send_message
+            phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Списано {redeemed} бонусов. Баланс: {int(balances2['total'])}."
-            send_message(user.phone, msg)
+            send_message(phone_for_wa, msg)
         except Exception:
             pass
 
@@ -181,13 +184,14 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     if earned > 0 and user.phone:
         try:
             from app.services.whatsapp import send_message
+            phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Вам начислено {earned} бонусов! Баланс: {int(balances2['total'])}. Спасибо за покупку!"
-            send_message(user.phone, msg)
+            send_message(phone_for_wa, msg)
         except Exception:
             pass
 
     out = TransactionOut.model_validate(txn)
-    out.user_phone = user.phone
+    out.user_phone = decrypt_field(user.phone) or user.phone
     return out
 
 
@@ -293,15 +297,16 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     db.commit()
 
     out = TransactionOut.model_validate(tx)
-    out.user_phone = user.phone
+    out.user_phone = decrypt_field(user.phone) or user.phone
 
     # --- WhatsApp уведомление о возврате ---
     if user.phone:
         try:
             from app.services.whatsapp import send_message
             balances2 = get_balances(db, user_id=user.id)
+            phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
-            send_message(user.phone, msg)
+            send_message(phone_for_wa, msg)
         except Exception:
             pass
 
@@ -314,10 +319,11 @@ def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_d
     require_role(request, "owner", "admin", "manager", "cashier")
 
     p = normalize_phone(user_phone)
+    p_hash = hashlib.sha256(p.encode()).hexdigest()
     user = (
         db.query(User)
         .filter(User.tenant_id == tenant_id)
-        .filter(User.phone == p)
+        .filter(User.phone_hash == p_hash)
         .first()
     )
     if not user:
