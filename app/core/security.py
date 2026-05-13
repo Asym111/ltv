@@ -28,3 +28,34 @@ def verify_password(password: str, salt_b64: str, hash_b64: str) -> bool:
 
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
     return hmac.compare_digest(dk, expected)
+
+
+from cryptography.fernet import Fernet
+
+def _get_fernet():
+    key = os.getenv("ENCRYPTION_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        return Fernet(key.encode())
+    except Exception:
+        return None
+
+def encrypt_field(value: str | None) -> str | None:
+    if not value:
+        return value
+    f = _get_fernet()
+    if not f:
+        return value
+    return f.encrypt(value.encode()).decode()
+
+def decrypt_field(value: str | None) -> str | None:
+    if not value:
+        return value
+    f = _get_fernet()
+    if not f:
+        return value
+    try:
+        return f.decrypt(value.encode()).decode()
+    except Exception:
+        return value

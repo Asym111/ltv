@@ -1,5 +1,6 @@
 from __future__ import annotations
 import io
+import hashlib
 from datetime import date, datetime
 from typing import Optional
 
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.database import get_db
+from app.core.security import encrypt_field, decrypt_field
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.bonus_grant import BonusGrant
@@ -53,7 +55,13 @@ def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]
     tenant_id = must_tenant_id(request)
     require_role(request, "owner", "admin", "manager")
     users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.id.desc()).all()
-    return [UserOut.model_validate(u) for u in users]
+    result = []
+    for u in users:
+        out = UserOut.model_validate(u)
+        out.phone = decrypt_field(u.phone) or u.phone
+        out.full_name = decrypt_field(u.full_name) if u.full_name else u.full_name
+        result.append(out)
+    return result
 
 
 @router.post("", response_model=UserOut)
@@ -68,8 +76,9 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Phone already exists")
     user = User(
         tenant_id=tenant_id,
-        phone=phone,
-        full_name=payload.full_name,
+        phone=encrypt_field(phone),
+        phone_hash=hashlib.sha256(phone.encode()).hexdigest(),
+        full_name=encrypt_field(payload.full_name) if payload.full_name else None,
         birth_date=payload.birth_date,
         tier=payload.tier or "Bronze",
         bonus_balance=int(payload.bonus_balance or 0),

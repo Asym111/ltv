@@ -1,11 +1,13 @@
 # app/api/crm.py
 from __future__ import annotations
 
+import hashlib
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
 from app.core.database import get_db
+from app.core.security import decrypt_field
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.schemas.crm import ClientMetricsOut
@@ -40,7 +42,8 @@ def must_tenant_id(request: Request) -> int:
 def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_db)) -> ClientMetricsOut:
     tenant_id = must_tenant_id(request)
     p = normalize_phone(phone)
-    user = db.query(User).filter(User.tenant_id == tenant_id, User.phone == p).first()
+    p_hash = hashlib.sha256(p.encode()).hexdigest()
+    user = db.query(User).filter(User.tenant_id == tenant_id, User.phone_hash == p_hash).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
@@ -67,8 +70,8 @@ def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_d
     bonus_balance = int(user.bonus_balance or 0)
 
     return ClientMetricsOut(
-        phone=user.phone,
-        full_name=(user.full_name or None),
+        phone=decrypt_field(user.phone) or user.phone,
+        full_name=decrypt_field(user.full_name) if user.full_name else None,
         tier=(user.tier or "Bronze"),
         total_spent=total_spent,
         purchases_count=purchases_count,

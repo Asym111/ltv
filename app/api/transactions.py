@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from app.core.security import encrypt_field, decrypt_field
+
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -75,17 +78,19 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 
     user_phone = normalize_phone(payload.user_phone)
 
+    phone_hash = hashlib.sha256(user_phone.encode()).hexdigest()
     user = (
         db.query(User)
         .filter(User.tenant_id == tenant_id)
-        .filter(User.phone == user_phone)
+        .filter(User.phone_hash == phone_hash)
         .first()
     )
     if not user:
         user = User(
             tenant_id=tenant_id,
-            phone=user_phone,
-            full_name=payload.full_name or "",
+            phone=encrypt_field(user_phone),
+            phone_hash=hashlib.sha256(user_phone.encode()).hexdigest(),
+            full_name=encrypt_field(payload.full_name or ""),
             birth_date=payload.birth_date,
             tier=payload.tier or "Bronze",
             bonus_balance=0,
@@ -95,7 +100,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
         db.refresh(user)
     else:
         if payload.full_name:
-            user.full_name = payload.full_name
+            user.full_name = encrypt_field(payload.full_name)
         if payload.birth_date:
             user.birth_date = payload.birth_date
         db.commit()

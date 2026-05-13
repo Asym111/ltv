@@ -18,6 +18,7 @@ class User(Base):
 
     # ❗️В мульти-аккаунте phone НЕ должен быть unique глобально
     phone = Column(String, index=True, nullable=False)
+    phone_hash = Column(String(64), index=True, nullable=True)
 
     full_name = Column(String, nullable=True)
     birth_date = Column(Date, nullable=True)
