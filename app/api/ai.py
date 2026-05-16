@@ -22,6 +22,7 @@ from app.models.transaction import Transaction
 from app.models.bonus_grant import BonusGrant
 from app.ai.insights import build_overview_payload
 from app.services.loyalty_engine import get_balances
+from app.core.security import decrypt_field
 
 from app.services.campaigns import (
     create_campaign as svc_create_campaign,
@@ -158,8 +159,10 @@ async def _try_llm(
 # Client payload builder
 # =========================
 def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = None) -> dict[str, Any]:
+    import hashlib
     phone = _norm_phone(raw_phone)
-    q = db.query(User).filter(User.phone == phone)
+    p_hash = hashlib.sha256(phone.encode()).hexdigest()
+    q = db.query(User).filter(User.phone_hash == p_hash)
     if tenant_id:
         q = q.filter(User.tenant_id == tenant_id)
     user = q.first()
@@ -185,7 +188,7 @@ def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = N
 
     return {
         "phone": phone,
-        "full_name": user.full_name,
+        "full_name": decrypt_field(user.full_name) if user.full_name else None,
         "tier": user.tier,
         "bonus": {
             "available": balances.get("available", 0),
@@ -468,7 +471,7 @@ async def ai_execute(
 
     # ── 3. Campaign create ────────────────────────────────────
     if parsed.path == "/admin/campaigns" and _truthy(_qs_str(qs, "create")):
-        return await _handle_create_campaign(qs, action_label, nav_url, db)
+        return await _handle_create_campaign(qs, action_label, nav_url, db, request)
 
     # ── 4. Plain nav ──────────────────────────────────────────
     return AiExecuteOut(
@@ -564,8 +567,14 @@ async def _handle_create_campaign(
     action_label: str,
     nav_url: str,
     db: Session,
+    request: Request,
 ) -> AiExecuteOut:
     """Создать кампанию из AI-рекомендации."""
+    current_user = getattr(request.state, "user", None) or {}
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     name = _qs_str(qs, "name")
     segment_key = _qs_str(qs, "segment_key")
     bonus = _qs_int(qs, "bonus", 0)
@@ -578,6 +587,7 @@ async def _handle_create_campaign(
         raise HTTPException(status_code=400, detail="bonus out of range")
 
     c = svc_create_campaign(db, {
+        "tenant_id": int(tenant_id),
         "name": name,
         "segment_key": segment_key,
         "suggested_bonus": bonus,

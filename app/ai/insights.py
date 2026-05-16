@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.core.security import decrypt_field
 
 
 @dataclass(frozen=True)
@@ -273,7 +274,7 @@ def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[st
         for r in top_rows:
             u = users_map.get(r.user_id)
             top5.append({
-                "phone": u.phone if u else str(r.user_id),
+                "phone": (decrypt_field(u.phone) or u.phone) if u else str(r.user_id),
                 "tier": u.tier if u else "?",
                 "total_spent": int(r.spent),
                 "txn_count": int(r.txn_count),

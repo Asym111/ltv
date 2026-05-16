@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import encrypt_field
 from app.models.invite import Invite
 from app.models.user import User
 
@@ -85,20 +87,21 @@ def accept_invite(payload: AcceptInviteIn, db: Session = Depends(get_db)):
     if datetime.utcnow() > invite.expires_at:
         raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
 
-    existing = db.query(User).filter(
-        User.tenant_id == invite.tenant_id,
-        User.phone == invite.phone,
-    ).first()
+    invite_phone = invite.phone or ""
+    if invite_phone:
+        p_hash = hashlib.sha256(invite_phone.encode()).hexdigest()
+        existing = db.query(User).filter(
+            User.tenant_id == invite.tenant_id,
+            User.phone_hash == p_hash,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
 
-    if existing:
-        raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
-
-    # Создаём пользователя (упрощённо, без хэша пароля — клиент докрутит auth)
     user = User(
         tenant_id=invite.tenant_id,
-        phone=invite.phone or "",
-        full_name=payload.full_name,
-        role=invite.role,
+        phone=encrypt_field(invite_phone) if invite_phone else "",
+        phone_hash=hashlib.sha256(invite_phone.encode()).hexdigest() if invite_phone else None,
+        full_name=encrypt_field(payload.full_name),
         bonus_balance=0,
     )
     db.add(user)
@@ -111,6 +114,6 @@ def accept_invite(payload: AcceptInviteIn, db: Session = Depends(get_db)):
     return {
         "ok": True,
         "user_id": user.id,
-        "role": user.role,
-        "message": f"Пользователь {user.full_name} успешно присоединился",
+        "role": invite.role,
+        "message": f"Пользователь {payload.full_name} успешно присоединился",
     }

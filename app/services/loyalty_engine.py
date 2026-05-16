@@ -201,19 +201,23 @@ def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
     if tiers_cfg:
         # ── Режим уровней: % из тира клиента ──────────────────
         tier = (tier or "Bronze").strip()
-        # Ищем точное совпадение по имени в tiers_json
         tier_map = {
             t.get("name", ""): t.get("bonus_percent", 0)
             for t in tiers_cfg if isinstance(t, dict)
         }
         if tier in tier_map:
+            # Тир клиента есть в настроенных уровнях — берём его %
             rate = int(tier_map[tier])
-        elif tier == "Gold":
-            rate = int(settings.earn_gold_percent)
-        elif tier == "Silver":
-            rate = int(settings.earn_silver_percent)
         else:
-            rate = int(settings.earn_bronze_percent)
+            # Тир клиента не в списке кастомных уровней → используем пороги по сумме чека
+            silver_thr = int(getattr(settings, "silver_threshold", None) or 5000)
+            gold_thr   = int(getattr(settings, "gold_threshold",   None) or 20000)
+            if paid_amount >= gold_thr:
+                rate = int(settings.earn_gold_percent)
+            elif paid_amount >= silver_thr:
+                rate = int(settings.earn_silver_percent)
+            else:
+                rate = int(settings.earn_bronze_percent)
     else:
         # ── Режим чека: % по сумме одного чека ────────────────
         silver_thr = int(getattr(settings, "silver_threshold", None) or 5000)

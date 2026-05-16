@@ -11,6 +11,7 @@ from app.core.security import decrypt_field
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.schemas.crm import ClientMetricsOut
+from app.services.loyalty_engine import get_balances
 
 router = APIRouter(prefix="/crm", tags=["crm"])
 
@@ -69,12 +70,16 @@ def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_d
     avg_check = (total_spent / purchases_count) if purchases_count else 0.0
     bonus_balance = int(user.bonus_balance or 0)
 
+    balances = get_balances(db, user_id=user.id)
+
     return ClientMetricsOut(
         phone=decrypt_field(user.phone) or user.phone,
         full_name=decrypt_field(user.full_name) if user.full_name else None,
         tier=(user.tier or "Bronze"),
+        birth_date=user.birth_date,
         total_spent=total_spent,
         purchases_count=purchases_count,
         avg_check=round(float(avg_check), 2),
-        bonus_balance=bonus_balance,
+        bonus_balance=int(balances["available"]),
+        pending_balance=int(balances["pending"]),
     )

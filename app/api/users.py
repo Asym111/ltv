@@ -71,7 +71,8 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
     phone = normalize_phone(payload.phone)
     if not phone:
         raise HTTPException(status_code=400, detail="Invalid phone")
-    exists = db.query(User).filter(User.tenant_id == tenant_id, User.phone == phone).first()
+    p_hash = hashlib.sha256(phone.encode()).hexdigest()
+    exists = db.query(User).filter(User.tenant_id == tenant_id, User.phone_hash == p_hash).first()
     if exists:
         raise HTTPException(status_code=400, detail="Phone already exists")
     user = User(
@@ -97,7 +98,7 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if payload.full_name is not None:
-        user.full_name = payload.full_name
+        user.full_name = encrypt_field(payload.full_name)
     if payload.birth_date is not None:
         user.birth_date = payload.birth_date
     if payload.tier is not None:
@@ -141,9 +142,10 @@ def anonymize_user_by_phone(
     require_role(request, "owner", "admin")
 
     phone_clean = normalize_phone(phone)
+    p_hash = hashlib.sha256(phone_clean.encode()).hexdigest()
     user = db.query(User).filter(
         User.tenant_id == tenant_id,
-        User.phone == phone_clean,
+        User.phone_hash == p_hash,
     ).first()
 
     if not user:
@@ -152,6 +154,7 @@ def anonymize_user_by_phone(
     # Анонимизируем данные
     anon_id = f"anon_{user.id}"
     user.phone = anon_id
+    user.phone_hash = None
     user.full_name = "Анонимный клиент"
     user.birth_date = None
     user.bonus_balance = 0
@@ -181,9 +184,10 @@ def gdpr_delete_user(
     require_role(request, "owner", "admin")
 
     phone_clean = normalize_phone(phone)
+    p_hash = hashlib.sha256(phone_clean.encode()).hexdigest()
     user = db.query(User).filter(
         User.tenant_id == tenant_id,
-        User.phone == phone_clean,
+        User.phone_hash == p_hash,
     ).first()
 
     if not user:
@@ -247,8 +251,8 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     for row_idx, (user, total_spent, tx_count) in enumerate(rows, 2):
         birth = user.birth_date.strftime("%d.%m.%Y") if user.birth_date else ""
         ws.cell(row=row_idx, column=1, value=user.id)
-        ws.cell(row=row_idx, column=2, value=user.phone)
-        ws.cell(row=row_idx, column=3, value=user.full_name or "")
+        ws.cell(row=row_idx, column=2, value=decrypt_field(user.phone) or user.phone)
+        ws.cell(row=row_idx, column=3, value=decrypt_field(user.full_name) if user.full_name else "")
         ws.cell(row=row_idx, column=4, value=birth)
         ws.cell(row=row_idx, column=5, value=user.tier or "Bronze")
         ws.cell(row=row_idx, column=6, value=user.bonus_balance or 0)
@@ -403,15 +407,17 @@ def import_users_excel(
             if t in VALID_TIERS:
                 tier = t
 
+        p_hash = hashlib.sha256(phone.encode()).hexdigest()
         existing = db.query(User).filter(
             User.tenant_id == tenant_id,
-            User.phone == phone,
+            User.phone_hash == p_hash,
         ).first()
 
         if existing:
             changed = False
-            if name and existing.full_name != name:
-                existing.full_name = name
+            enc_name = encrypt_field(name) if name else None
+            if name and existing.full_name != enc_name:
+                existing.full_name = enc_name
                 changed = True
             if birth and existing.birth_date != birth:
                 existing.birth_date = birth
@@ -423,8 +429,9 @@ def import_users_excel(
         else:
             user = User(
                 tenant_id=tenant_id,
-                phone=phone,
-                full_name=name,
+                phone=encrypt_field(phone),
+                phone_hash=p_hash,
+                full_name=encrypt_field(name) if name else None,
                 birth_date=birth,
                 tier=tier,
                 bonus_balance=0,

@@ -2,8 +2,7 @@
 
 {% block topbar_actions %}
 <div class="d-flex gap-2">
-  {% set role = current_user.role if current_user else '' %}
-  {% if role in ['owner', 'admin'] %}
+  {% if is_superadmin %}
   <button class="btn btn-sm btn-success" type="button" id="vidOpenAddBtn">
     <i class="bi bi-plus-circle me-1"></i> Добавить видео
   </button>

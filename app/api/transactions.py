@@ -122,7 +122,9 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     if redeemed > active_balance:
         redeemed = active_balance
 
-    earned = calc_earn(paid_amount=paid_amount, tier=user.tier, settings=settings)
+    # Начисляем % от суммы ПОСЛЕ вычета использованных бонусов
+    net_amount = max(0, paid_amount - redeemed)
+    earned = calc_earn(paid_amount=net_amount, tier=user.tier, settings=settings)
 
     txn = Transaction(
         tenant_id=tenant_id,
@@ -294,6 +296,11 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
         add = f"[REFUND {refund_amount}] {payload.comment}".strip()
         tx.comment = (base + " " + add).strip() if base else add
 
+    db.commit()
+
+    # Обновляем кэш бонусного баланса после возврата
+    balances_after = get_balances(db, user_id=user.id)
+    user.bonus_balance = int(balances_after["total"])
     db.commit()
 
     out = TransactionOut.model_validate(tx)

@@ -12,6 +12,7 @@ from sqlalchemy import func, extract
 from openpyxl import Workbook
 
 from app.core.database import get_db
+from app.core.security import decrypt_field
 from app.core.tenant_utils import get_tenant_ids_for_user
 from app.models.bonus_grant import BonusGrant
 from app.models.user import User
@@ -99,8 +100,8 @@ def birthdays_report(
         age = year - bd.year if bd else None
         items.append({
             "user_id": u.id,
-            "phone": u.phone or "",
-            "full_name": u.full_name or "",
+            "phone": decrypt_field(u.phone) or u.phone or "",
+            "full_name": decrypt_field(u.full_name) if u.full_name else "",
             "birth_date": str(bd),
             "day": bd.day if bd else None,
             "age": age,
@@ -145,8 +146,8 @@ def transactions_excel(
         ws.append([
             tx.id,
             str(tx.created_at),
-            name or "",
-            phone or "",
+            decrypt_field(name) if name else "",
+            decrypt_field(phone) or phone or "",
             int(tx.amount or 0),
             int(tx.paid_amount or 0),
             int(tx.redeem_points or 0),

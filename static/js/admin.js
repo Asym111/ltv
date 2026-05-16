@@ -2702,7 +2702,7 @@ function initAccountsPage() {
     try {
       await fetch("/api/accounts/change-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
         body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
       }).then(async r => {
         const j = await r.json().catch(() => ({}));
@@ -2932,7 +2932,7 @@ function initVideosPage() {
         if (!confirm("Удалить видео?")) return;
         const id = btn.dataset.id;
         try {
-          await fetch(`/api/videos/${id}`, { method: "DELETE" })
+          await fetch(`/api/videos/${id}`, { method: "DELETE", headers: { "X-CSRF-Token": window.__CSRF_TOKEN__ || "" } })
             .then(async r => {
               const j = await r.json().catch(() => ({}));
               if (!r.ok) throw new Error(j?.detail || "Ошибка");
@@ -3022,7 +3022,7 @@ function initVideosPage() {
     try {
       await fetch("/api/videos/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
         body: JSON.stringify({ youtube_url: url, title, category: cat, tags, description: desc }),
       }).then(async r => {
         const j = await r.json().catch(() => ({}));

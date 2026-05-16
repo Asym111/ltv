@@ -118,7 +118,11 @@
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const resp = await fetch("/api/users/import/excel", { method: "POST", body: fd });
+      const resp = await fetch("/api/users/import/excel", {
+        method: "POST",
+        headers: { "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
+        body: fd,
+      });
       const data = await resp.json();
 
       if (!resp.ok) { showImportResult("danger", data.detail || "Ошибка импорта"); return; }

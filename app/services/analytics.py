@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.core.security import decrypt_field
 
 # UTC+5 Алматы
 ALMATY = timezone(timedelta(hours=5))
@@ -250,14 +251,16 @@ def list_clients_by_segment(
         if r_min and r < r_min: continue
         if f_min and f < f_min: continue
         if m_min and m < m_min: continue
+        phone_plain = decrypt_field(user.phone) or user.phone or ""
+        name_plain = decrypt_field(user.full_name) if user.full_name else ""
         if q:
             q_low = q.lower()
-            if (user.full_name or "").lower().find(q_low) == -1 and (user.phone or "").find(q_low) == -1:
+            if name_plain.lower().find(q_low) == -1 and phone_plain.find(q_low) == -1:
                 continue
 
         results.append({
-            "phone":            user.phone,
-            "full_name":        user.full_name,
+            "phone":            phone_plain,
+            "full_name":        name_plain or None,
             "tier":             user.tier or "Bronze",
             "last_purchase_at": last_tx.isoformat() if last_tx else None,
             "recency_days":     recency_days,

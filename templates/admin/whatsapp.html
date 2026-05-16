@@ -175,7 +175,7 @@
   document.getElementById('waLogoutBtn')?.addEventListener('click', async () => {
     if (!confirm('Отключить WhatsApp сессию?')) return;
     try {
-      await fetch('/api/whatsapp/logout', { method: 'POST' });
+      await fetch('/api/whatsapp/logout', { method: 'POST', headers: { 'X-CSRF-Token': window.__CSRF_TOKEN__ || '' } });
       document.getElementById('waQrBox').innerHTML = '<div class="text-muted small">Сессия отключена. Получите новый QR для подключения.</div>';
     } catch (e) {
       alert('Ошибка при отключении');
