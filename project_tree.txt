@@ -1,1 +1,201 @@
+.
+├── .git
+│   ├── hooks
+│   │   ├── applypatch-msg.sample
+│   │   ├── commit-msg.sample
+│   │   ├── fsmonitor-watchman.sample
+│   │   ├── post-checkout
+│   │   ├── post-commit
+│   │   ├── post-merge
+│   │   ├── post-update.sample
+│   │   ├── pre-applypatch.sample
+│   │   ├── pre-commit.sample
+│   │   ├── pre-merge-commit.sample
+│   │   ├── pre-push
+│   │   ├── pre-push.sample
+│   │   ├── pre-rebase.sample
+│   │   ├── pre-receive.sample
+│   │   ├── prepare-commit-msg.sample
+│   │   ├── push-to-checkout.sample
+│   │   ├── sendemail-validate.sample
+│   │   └── update.sample
+│   ├── info
+│   │   └── exclude
+│   ├── lfs
+│   │   └── tmp
+│   ├── logs
+│   │   ├── refs
+│   │   │   ├── heads
+│   │   │   │   └── main
+│   │   │   └── remotes
+│   │   │       └── origin
+│   │   │           └── HEAD
+│   │   └── HEAD
+│   ├── objects
+│   │   ├── info
+│   │   └── pack
+│   │       ├── pack-300c2762cca751ee40bc126c0d337dcc698d3a2b.idx
+│   │       ├── pack-300c2762cca751ee40bc126c0d337dcc698d3a2b.pack
+│   │       ├── pack-300c2762cca751ee40bc126c0d337dcc698d3a2b.rev
+│   │       ├── pack-ca8baa0bfc617c2fc98af80cbde10c6ee5921e01.idx
+│   │       ├── pack-ca8baa0bfc617c2fc98af80cbde10c6ee5921e01.pack
+│   │       └── pack-ca8baa0bfc617c2fc98af80cbde10c6ee5921e01.rev
+│   ├── refs
+│   │   ├── heads
+│   │   │   └── main
+│   │   ├── remotes
+│   │   │   └── origin
+│   │   │       └── HEAD
+│   │   └── tags
+│   ├── FETCH_HEAD
+│   ├── HEAD
+│   ├── config
+│   ├── description
+│   ├── index
+│   └── packed-refs
+├── app
+│   ├── ai
+│   │   ├── __init__.py
+│   │   ├── gemini_client.py
+│   │   ├── insights.py
+│   │   ├── openai_client.py
+│   │   ├── prompts.py
+│   │   └── recommendations.py
+│   ├── api
+│   │   ├── ai
+│   │   │   └── overview
+│   │   ├── __init__.py
+│   │   ├── accounts_api.py
+│   │   ├── ai.py
+│   │   ├── analytics.py
+│   │   ├── ask.py
+│   │   ├── campaigns.py
+│   │   ├── crm.py
+│   │   ├── loyalty.py
+│   │   ├── loyaltyk.py
+│   │   ├── reports.py
+│   │   ├── settings_api.py
+│   │   ├── transactions.py
+│   │   ├── users.py
+│   │   ├── videos_api.py
+│   │   └── whatsapp.py
+│   ├── core
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── loyalty_rules.py
+│   │   ├── role_guards.py
+│   │   ├── security.py
+│   │   ├── tenant_utils.py
+│   │   └── tier_rules.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── bonus.py
+│   │   ├── bonus_grant.py
+│   │   ├── campaign.py
+│   │   ├── invite.py
+│   │   ├── invites.py
+│   │   ├── settings_model.py
+│   │   ├── transaction.py
+│   │   ├── user.py
+│   │   └── video_model.py
+│   ├── schemas
+│   │   ├── __init__.py
+│   │   ├── ai.py
+│   │   ├── analytics.py
+│   │   ├── bonus.py
+│   │   ├── campaigns.py
+│   │   ├── crm.py
+│   │   ├── loyalty.py
+│   │   ├── settings_schema.py
+│   │   ├── transaction.py
+│   │   └── user.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── analytics.py
+│   │   ├── campaigns.py
+│   │   ├── loyalty.py
+│   │   ├── loyalty_engine.py
+│   │   ├── scheduler.py
+│   │   ├── tier.py
+│   │   └── whatsapp.py
+│   ├── web
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── admin_accounts_web.py
+│   │   ├── admin_campaigns.py
+│   │   ├── admin_videos_web.py
+│   │   ├── admin_whatsapp.py
+│   │   ├── auth.py
+│   │   ├── dev_admin.py
+│   │   └── superadmin.py
+│   ├── README.md
+│   ├── __init__.py
+│   ├── _old_main.py
+│   ├── migrate_settings.py
+│   └── requirements.txt
+├── static
+│   ├── css
+│   │   └── app.css
+│   ├── js
+│   │   └── admin.js
+│   ├── vendor
+│   │   └── bootstrap
+│   │       └── bootstrap.bundle.min.js
+│   ├── apple-touch-icon.png
+│   └── favicon.ico
+├── templates
+│   ├── admin
+│   │   ├── accounts.html
+│   │   ├── analytics.html
+│   │   ├── analytics_segment.html
+│   │   ├── campaign_detail.html
+│   │   ├── campaigns.html
+│   │   ├── client.html
+│   │   ├── clients_db.html
+│   │   ├── desktop.html
+│   │   ├── index.html
+│   │   ├── news.html
+│   │   ├── placeholder.html
+│   │   ├── settings.html
+│   │   ├── transactions.html
+│   │   ├── videos.html
+│   │   └── whatsapp.html
+│   ├── auth
+│   │   ├── locked.html
+│   │   └── login.html
+│   ├── dev
+│   │   └── tenants.html
+│   ├── superadmin
+│   │   ├── dashboard.html
+│   │   ├── login.html
+│   │   └── videos.html
+│   └── base.html
+├── .gitignore
+├── README.md
+├── STEP_7_TIER_UPGRADE.md
+├── check_imports.py
+├── check_routes.py
+├── diagnose.py
+├── diagnose_full.py
+├── diagnose_system.py
+├── expected_routes.py
+├── ltv.rar
+├── main.py
+├── migrate_videos.py
+├── pip_install_log.txt
+├── project_tree.txt
+├── requirements.txt
+├── run_diagnose.bat
+├── start_server.bat
+├── test_api.py
+├── test_api_routes.py
+├── test_endpoints.py
+├── test_http.py
+├── test_import.py
+├── test_routes.py
+├── test_tiers.py
+└── verify_setup.py
 
+38 directories, 161 files

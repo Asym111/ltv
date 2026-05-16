@@ -77,6 +77,8 @@ def campaigns_build(campaign_id: int, request: Request, db: Session = Depends(ge
         return CampaignOut.model_validate(c, from_attributes=True)
     except ValueError:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Build failed: {str(e)}")
 
 
 @router.get("/{campaign_id}/recipients", response_model=list[CampaignRecipientOut])

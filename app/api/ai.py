@@ -514,12 +514,15 @@ async def _handle_grant_bonus(
     if len(reason) > 255:
         reason = reason[:255]
 
-    # Находим клиента (tenant-aware)
+    # Находим клиента (tenant-aware) — поиск по phone_hash из-за шифрования
+    import hashlib
+    phone_hash = hashlib.sha256(phone.encode()).hexdigest()
+
     tenant_id: int | None = None
     current_user = getattr(request.state, "user", None) or {}
     tenant_id = current_user.get("tenant_id")
 
-    q = db.query(User).filter(User.phone == phone)
+    q = db.query(User).filter(User.phone_hash == phone_hash)
     if tenant_id:
         q = q.filter(User.tenant_id == int(tenant_id))
     user = q.first()
@@ -527,23 +530,24 @@ async def _handle_grant_bonus(
     if not user:
         raise HTTPException(status_code=404, detail=f"Клиент {phone} не найден")
 
-    # Начисляем бонусы через BonusGrant
+    # Начисляем бонусы через BonusGrant (используем поля совместимые с loyalty_engine)
     now = datetime.utcnow()
     grant = BonusGrant(
         user_id=user.id,
         transaction_id=None,
         amount=amount,
+        remaining=amount,
         source="ai_grant",
-        status="available",   # AI бонусы доступны сразу
-        note=reason,
-        activated_at=now,
+        status="available",
+        available_from=now,
         expires_at=now + timedelta(days=30),
-        created_at=now,
     )
     db.add(grant)
+    db.commit()
 
-    # Обновляем баланс пользователя
-    user.bonus_balance = (user.bonus_balance or 0) + amount
+    # Обновляем баланс пользователя через пересчёт из грантов
+    balances = get_balances(db, user.id)
+    user.bonus_balance = int(balances["total"])
     db.commit()
 
     return AiExecuteOut(

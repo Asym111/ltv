@@ -261,7 +261,11 @@ def change_password(
     if not uid:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    u = db.query(AuthUser).filter(AuthUser.id == int(uid)).first()
+    tenant_id = must_tenant_id(request)
+    u = db.query(AuthUser).filter(
+        AuthUser.id == int(uid),
+        AuthUser.tenant_id == tenant_id,
+    ).first()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 

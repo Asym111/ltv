@@ -134,6 +134,7 @@ def build_analytics_overview(db: Session, tenant_id: int) -> Dict[str, Any]:
         )
         .filter(Transaction.tenant_id == tenant_id, Transaction.created_at >= since_90)
         .group_by(Transaction.user_id)
+        .limit(5000)
         .all()
     )
     total_freq_rows = (
@@ -206,6 +207,7 @@ def list_clients_by_segment(
         )
         .filter(Transaction.tenant_id == tenant_id, Transaction.created_at >= since_90)
         .group_by(Transaction.user_id)
+        .limit(3000)
         .all()
     )
     total_rows = (

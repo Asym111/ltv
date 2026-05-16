@@ -14,3 +14,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+*.rar
+
+# Dependencies
+node_modules/
+
+# Nested repository metadata backups
+.git-backup*/
