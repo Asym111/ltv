@@ -43,6 +43,7 @@ from app.api.accounts_api import router as accounts_router
 from app.api.videos_api import router as videos_router
 from app.api.whatsapp import router as whatsapp_router
 from app.api.reports import router as reports_router
+from app.api.tasks import router as tasks_router
 from app.models.invites import router as invites_router
 
 from app.web.admin import router as admin_router
@@ -394,6 +395,7 @@ app.include_router(ai_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
+app.include_router(tasks_router, prefix="/api")
 app.include_router(invites_router, prefix="/models")
 
 app.include_router(auth_router)

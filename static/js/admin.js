@@ -153,6 +153,17 @@ async function apiDelete(url) {
   return out;
 }
 
+async function apiPatch(url, data) {
+  const r = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
+    body: JSON.stringify(data),
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out?.detail || `${r.status} ${r.statusText}`);
+  return out;
+}
+
 // =========================
 // Execute recommendation (SERVER-validated)
 // =========================
@@ -1052,26 +1063,10 @@ function initDashFeed() {
 }
 
 // ── Tasks (задачи) ────────────────────────────────────────
-const TASKS_KEY = "ltv_tasks_v1";
-
-function loadTasksFromStorage() {
-  try {
-    return JSON.parse(localStorage.getItem(TASKS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveTasksToStorage(tasks) {
-  try {
-    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
-  } catch {
-    // ignore
-  }
-}
 
 function initDashTasks() {
   const role = window.__USER_ROLE__ || "owner";
+  const isStaffOnly = role === "staff";
   const addBtn = document.getElementById("taskAddBtn");
   const form = document.getElementById("taskAddForm");
   const saveBtn = document.getElementById("taskSaveBtn");
@@ -1089,7 +1084,7 @@ function initDashTasks() {
       const users = Array.isArray(data) ? data : (data.users || []);
       users.filter((u) => u.role !== "owner").forEach((u) => {
         const opt = document.createElement("option");
-        opt.value = u.phone || u.id;
+        opt.value = u.name || u.phone;
         opt.textContent = `${u.name || u.phone} (${u.role})`;
         assignSel.appendChild(opt);
       });
@@ -1098,24 +1093,22 @@ function initDashTasks() {
     }
   }
 
-  function renderTasks(box, tasks, isStaff = false) {
+  function renderTasks(box, tasks, readOnly = false) {
     if (!box) return;
-
-    const withIndex = (Array.isArray(tasks) ? tasks : []).map((t, idx) => ({ t, idx }));
-    const myPhone = String(window.__USER_PHONE__ || "");
-    const rows = isStaff
-      ? withIndex.filter(({ t }) => !t.assignee || String(t.assignee) === myPhone)
-      : withIndex;
+    const myName = String(window.__USER_NAME__ || "");
+    const rows = readOnly
+      ? (tasks || []).filter(t => !t.assignee || t.assignee === myName)
+      : (tasks || []);
 
     if (!rows.length) {
       box.innerHTML = `<div class="text-muted small">Задач нет</div>`;
       return;
     }
 
-    box.innerHTML = rows.map(({ t, idx }) => `
-      <div class="task-item ${t.done ? "done" : ""}">
+    box.innerHTML = rows.map(t => `
+      <div class="task-item ${t.done ? "done" : ""}" data-id="${t.id}">
         <button class="task-check ${t.done ? "checked" : ""}"
-                onclick="toggleTask(${idx})"
+                onclick="toggleTask(${t.id}, ${t.done})"
                 title="${t.done ? "Отменить" : "Выполнено"}">
           <i class="bi bi-${t.done ? "check-circle-fill" : "circle"}"></i>
         </button>
@@ -1123,31 +1116,45 @@ function initDashTasks() {
           <div class="task-text">${t.text || "—"}</div>
           ${t.assignee ? `<div class="task-meta">${t.assignee}</div>` : ""}
         </div>
-        ${!isStaff ? `
-        <button class="task-del" onclick="deleteTask(${idx})" title="Удалить">
+        ${!readOnly ? `
+        <button class="task-del" onclick="deleteTask(${t.id})" title="Удалить">
           <i class="bi bi-x"></i>
         </button>` : ""}
       </div>
     `).join("");
   }
 
-  window.toggleTask = function toggleTask(idx) {
-    const tasks = loadTasksFromStorage();
-    if (tasks[idx]) tasks[idx].done = !tasks[idx].done;
-    saveTasksToStorage(tasks);
-    if (role === "staff") renderTasks(staffList, tasks, true);
-    else renderTasks(tasksList, tasks);
+  async function loadTasks() {
+    try {
+      const tasks = await apiGet("/api/tasks/");
+      if (isStaffOnly && staffList) renderTasks(staffList, tasks, true);
+      else if (tasksList) renderTasks(tasksList, tasks, false);
+    } catch {
+      // ignore
+    }
+  }
+
+  window.toggleTask = async function(taskId, currentDone) {
+    try {
+      await apiPatch(`/api/tasks/${taskId}`, { done: !currentDone });
+      loadTasks();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+    }
   };
 
-  window.deleteTask = function deleteTask(idx) {
-    const tasks = loadTasksFromStorage();
-    tasks.splice(idx, 1);
-    saveTasksToStorage(tasks);
-    renderTasks(tasksList, tasks);
+  window.deleteTask = async function(taskId) {
+    try {
+      await apiDelete(`/api/tasks/${taskId}`);
+      loadTasks();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+    }
   };
 
-  if (role !== "staff" && tasksList) {
-    renderTasks(tasksList, loadTasksFromStorage());
+  loadTasks();
+
+  if (!isStaffOnly && tasksList) {
     loadStaff();
 
     addBtn?.addEventListener("click", () => {
@@ -1157,36 +1164,24 @@ function initDashTasks() {
 
     cancelBtn?.addEventListener("click", () => form?.classList.add("d-none"));
 
-    saveBtn?.addEventListener("click", () => {
+    saveBtn?.addEventListener("click", async () => {
       const text = (taskText?.value || "").trim();
       if (!text) {
-        if (errEl) {
-          errEl.textContent = "Введите текст задачи";
-          errEl.classList.remove("d-none");
-        }
+        if (errEl) { errEl.textContent = "Введите текст задачи"; errEl.classList.remove("d-none"); }
         return;
       }
       if (errEl) errEl.classList.add("d-none");
-
-      const tasks = loadTasksFromStorage();
-      tasks.unshift({
-        text,
-        assignee: assignSel?.value || "",
-        done: false,
-        created: new Date().toISOString(),
-      });
-      saveTasksToStorage(tasks);
-      renderTasks(tasksList, tasks);
-
-      if (taskText) taskText.value = "";
-      if (assignSel) assignSel.value = "";
-      form?.classList.add("d-none");
-      uiToast("Задача добавлена", "success");
+      try {
+        await apiPost("/api/tasks/", { text, assignee: assignSel?.value || "" });
+        if (taskText) taskText.value = "";
+        if (assignSel) assignSel.value = "";
+        form?.classList.add("d-none");
+        uiToast("Задача добавлена", "success");
+        loadTasks();
+      } catch (e) {
+        uiToast(`Ошибка: ${e.message}`, "error");
+      }
     });
-  }
-
-  if (role === "staff" && staffList) {
-    renderTasks(staffList, loadTasksFromStorage(), true);
   }
 }
 
