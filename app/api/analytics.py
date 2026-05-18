@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.roles import ANALYTICS_ROLES
 from app.schemas.analytics import AnalyticsOverviewOut, AnalyticsSegmentClientsOut
 from app.services.analytics import build_analytics_overview, list_clients_by_segment
 
@@ -17,8 +18,16 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") not in allowed:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    return u
+
+
 @router.get("/overview", response_model=AnalyticsOverviewOut)
 def analytics_overview(request: Request, db: Session = Depends(get_db)) -> AnalyticsOverviewOut:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     data = build_analytics_overview(db, tenant_id=tenant_id)
     return AnalyticsOverviewOut.model_validate(data)
@@ -37,6 +46,7 @@ def analytics_segment_clients(
     sort: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
 ) -> AnalyticsSegmentClientsOut:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     data = list_clients_by_segment(
         db,

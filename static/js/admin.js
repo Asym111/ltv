@@ -2721,8 +2721,10 @@ function initAccountsPage() {
   // ── Users list ────────────────────────────────────
   function roleBadge(role) {
     const r = (role || "").toLowerCase();
-    if (r === "owner") return `<span class="badge text-bg-warning text-dark">OWNER</span>`;
-    if (r === "admin") return `<span class="badge text-bg-primary">ADMIN</span>`;
+    if (r === "owner")   return `<span class="badge text-bg-warning text-dark">OWNER</span>`;
+    if (r === "admin")   return `<span class="badge text-bg-primary">ADMIN</span>`;
+    if (r === "manager") return `<span class="badge text-bg-info text-dark">MANAGER</span>`;
+    if (r === "cashier") return `<span class="badge text-bg-success">CASHIER</span>`;
     return `<span class="badge text-bg-secondary">STAFF</span>`;
   }
 
@@ -2760,6 +2762,15 @@ function initAccountsPage() {
           <td class="text-muted small">${u.last_login_at ? fmtDate(u.last_login_at) : "—"}</td>
           <td class="text-end">
             <div class="d-flex gap-1 justify-content-end">
+              <select class="form-select form-select-sm" style="max-width:130px"
+                      onchange="accChangeRole(${u.id}, this.value, this)"
+                      title="Изменить роль">
+                <option value="staff"   ${u.role==="staff"   ? "selected" : ""}>Staff</option>
+                <option value="cashier" ${u.role==="cashier" ? "selected" : ""}>Cashier</option>
+                <option value="manager" ${u.role==="manager" ? "selected" : ""}>Manager</option>
+                <option value="admin"   ${u.role==="admin"   ? "selected" : ""}>Admin</option>
+                <option value="owner"   ${u.role==="owner"   ? "selected" : ""}>Owner</option>
+              </select>
               <button class="btn btn-sm btn-outline-secondary"
                       onclick="accToggleUser(${u.id}, ${!u.is_active})"
                       title="${u.is_active ? "Деактивировать" : "Активировать"}">
@@ -2780,11 +2791,31 @@ function initAccountsPage() {
     }
   }
 
+  window.accChangeRole = async function(userId, newRole, selectEl) {
+    const prev = [...selectEl.options].find(o => o.selected && o.value !== newRole)?.value;
+    try {
+      await fetch(`/api/accounts/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
+        body: JSON.stringify({ role: newRole }),
+      }).then(async r => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j?.detail || "Ошибка");
+        return j;
+      });
+      uiToast(`Роль изменена на ${newRole}`, "success");
+      loadUsers();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+      loadUsers();
+    }
+  };
+
   window.accToggleUser = async function(userId, isActive) {
     try {
       await fetch(`/api/accounts/users/${userId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": window.__CSRF_TOKEN__ || "" },
         body: JSON.stringify({ is_active: isActive }),
       }).then(async r => {
         const j = await r.json().catch(() => ({}));

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.database import get_db
 from app.core.security import normalize_phone, hash_password, verify_password
+from app.core.roles import ALL_ROLES
 from app.models.auth import AuthUser, Tenant
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -78,7 +79,7 @@ def must_role(request: Request, *roles: str) -> dict:
     return u
 
 
-ALLOWED_ROLES = {"owner", "admin", "staff"}
+ALLOWED_ROLES = ALL_ROLES
 
 
 # ── Endpoints ──────────────────────────────────────────────
@@ -205,17 +206,27 @@ def update_user(
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if payload.role and payload.role == "owner" and current_user.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can assign owner role")
-
     if payload.name is not None:
         u.name = payload.name.strip()
+
     if payload.role is not None and payload.role in ALLOWED_ROLES:
+        old_role = u.role
+        if payload.role == "owner" and current_user.get("role") != "owner":
+            raise HTTPException(status_code=403, detail="Only owner can assign owner role")
         u.role = payload.role
+        if old_role != payload.role:
+            # Invalidate all active sessions for this user so new role applies immediately
+            u.session_version = (u.session_version or 1) + 1
+
     if payload.is_active is not None:
         if u.id == current_user.get("id") and not payload.is_active:
             raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
-        u.is_active = payload.is_active
+        if u.is_active != payload.is_active:
+            u.is_active = payload.is_active
+            # Force logout of active sessions on deactivation
+            if not payload.is_active:
+                u.session_version = (u.session_version or 1) + 1
+
     if payload.password:
         salt, pw_hash = hash_password(payload.password)
         u.password_salt = salt

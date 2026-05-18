@@ -163,13 +163,13 @@ if IS_PROD:
 
 
 class AuthGuardMiddleware(BaseHTTPMiddleware):
-    # Страницы только для owner
+    # owner only
     OWNER_ONLY_PATHS = (
         "/admin/settings",
         "/admin/accounts",
         "/api/settings",
     )
-    # Страницы для admin + owner
+    # owner + admin only
     ADMIN_PLUS_PATHS = (
         "/admin/analytics",
         "/admin/campaigns",
@@ -178,6 +178,12 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         "/api/campaigns",
         "/api/whatsapp",
         "/api/ai",
+        "/api/reports",
+    )
+    # owner + admin + manager (cashier and staff blocked)
+    MANAGER_PLUS_PATHS = (
+        "/admin/clients",
+        "/admin/client/",
     )
 
     async def dispatch(self, request: Request, call_next):
@@ -304,6 +310,15 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                     if path.startswith("/api"):
                         return JSONResponse(
                             {"detail": "Доступ запрещён. Требуется роль: admin или owner"},
+                            status_code=403,
+                        )
+                    return RedirectResponse(url="/admin?e=forbidden", status_code=303)
+
+            if any(path.startswith(p) for p in self.MANAGER_PLUS_PATHS):
+                if role not in ("owner", "admin", "manager"):
+                    if path.startswith("/api"):
+                        return JSONResponse(
+                            {"detail": "Доступ запрещён. Требуется роль: manager, admin или owner"},
                             status_code=403,
                         )
                     return RedirectResponse(url="/admin?e=forbidden", status_code=303)

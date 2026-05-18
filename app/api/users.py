@@ -11,6 +11,7 @@ from sqlalchemy import func
 
 from app.core.database import get_db
 from app.core.security import encrypt_field, decrypt_field
+from app.core.roles import CLIENT_ACCESS_ROLES, ANALYTICS_ROLES
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.bonus_grant import BonusGrant
@@ -53,7 +54,7 @@ def require_role(request: Request, *allowed: str):
 @router.get("/", response_model=list[UserOut])
 def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]:
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
     users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.id.desc()).all()
     result = []
     for u in users:
@@ -67,7 +68,7 @@ def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]
 @router.post("", response_model=UserOut)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db)) -> UserOut:
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
     phone = normalize_phone(payload.phone)
     if not phone:
         raise HTTPException(status_code=400, detail="Invalid phone")
@@ -93,7 +94,7 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)) -> UserOut:
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
     user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -116,7 +117,7 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
 def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     """Удаление клиента. Только owner/admin."""
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin")
+    require_role(request, *ANALYTICS_ROLES)
     user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -139,7 +140,7 @@ def anonymize_user_by_phone(
     Доступ: owner, admin. Также может использоваться для самоудаления.
     """
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin")
+    require_role(request, *ANALYTICS_ROLES)
 
     phone_clean = normalize_phone(phone)
     p_hash = hashlib.sha256(phone_clean.encode()).hexdigest()
@@ -181,7 +182,7 @@ def gdpr_delete_user(
     Доступ: owner, admin.
     """
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin")
+    require_role(request, *ANALYTICS_ROLES)
 
     phone_clean = normalize_phone(phone)
     p_hash = hashlib.sha256(phone_clean.encode()).hexdigest()
@@ -217,7 +218,7 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     from openpyxl.styles import Font, PatternFill, Alignment
 
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
 
     rows = (
         db.query(
@@ -314,7 +315,7 @@ def import_users_excel(
     import openpyxl
 
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
 
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="Только .xlsx файлы")

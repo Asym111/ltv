@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.roles import ANALYTICS_ROLES
 from app.schemas.campaigns import CampaignCreateIn, CampaignOut, CampaignDetailOut, CampaignRecipientOut
 from app.services.campaigns import list_campaigns, create_campaign, get_campaign, build_recipients, list_recipients
 
@@ -19,8 +20,16 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") not in allowed:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    return u
+
+
 @router.get("/", response_model=list[CampaignOut])
 def campaigns_list(request: Request, db: Session = Depends(get_db)) -> list[CampaignOut]:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     rows = list_campaigns(db, tenant_id=tenant_id)
     return [CampaignOut.model_validate(r, from_attributes=True) for r in rows]
@@ -28,6 +37,7 @@ def campaigns_list(request: Request, db: Session = Depends(get_db)) -> list[Camp
 
 @router.post("/", response_model=CampaignOut)
 def campaigns_create(payload: CampaignCreateIn, request: Request, db: Session = Depends(get_db)) -> CampaignOut:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     data = payload.model_dump()
     data["tenant_id"] = tenant_id
@@ -37,6 +47,7 @@ def campaigns_create(payload: CampaignCreateIn, request: Request, db: Session = 
 
 @router.get("/{campaign_id}", response_model=CampaignDetailOut)
 def campaigns_get(campaign_id: int, request: Request, db: Session = Depends(get_db)) -> CampaignDetailOut:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     c = get_campaign(db, campaign_id, tenant_id=tenant_id)
     if not c:
@@ -71,6 +82,7 @@ def campaigns_get(campaign_id: int, request: Request, db: Session = Depends(get_
 
 @router.post("/{campaign_id}/build", response_model=CampaignOut)
 def campaigns_build(campaign_id: int, request: Request, db: Session = Depends(get_db)) -> CampaignOut:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     try:
         c = build_recipients(db, campaign_id, tenant_id=tenant_id)
@@ -89,6 +101,7 @@ def campaigns_recipients(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[CampaignRecipientOut]:
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     c = get_campaign(db, campaign_id, tenant_id=tenant_id)
     if not c:

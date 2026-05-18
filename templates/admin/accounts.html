@@ -116,10 +116,12 @@
           <div class="col-12 col-md-4">
             <label class="settings-label">Роль</label>
             <select id="accNewRole" class="settings-select mt-1">
-              <option value="staff">Staff — кассир/продавец</option>
-              <option value="admin">Admin — менеджер</option>
+              <option value="staff">Staff — только просмотр</option>
+              <option value="cashier">Cashier — транзакции</option>
+              <option value="manager">Manager — клиенты + транзакции</option>
+              <option value="admin">Admin — аналитика + кампании</option>
               {% if current_user and current_user.role == 'owner' %}
-              <option value="owner">Owner — владелец</option>
+              <option value="owner">Owner — полный доступ</option>
               {% endif %}
             </select>
           </div>
@@ -176,9 +178,25 @@
         <div class="col-12 col-md-4">
           <div class="acc-role-card">
             <div class="acc-role-name">
+              <span class="badge text-bg-info text-dark">MANAGER</span>
+            </div>
+            <div class="acc-role-desc">Транзакции + просмотр карточек клиентов. Без аналитики и кампаний.</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="acc-role-card">
+            <div class="acc-role-name">
+              <span class="badge text-bg-success">CASHIER</span>
+            </div>
+            <div class="acc-role-desc">Только транзакции (начисление и списание). Без доступа к клиентской базе.</div>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="acc-role-card">
+            <div class="acc-role-name">
               <span class="badge text-bg-secondary">STAFF</span>
             </div>
-            <div class="acc-role-desc">Только транзакции и просмотр клиентов. Без аналитики и настроек.</div>
+            <div class="acc-role-desc">Минимальный доступ — только просмотр. Без транзакций и аналитики.</div>
           </div>
         </div>
       </div>

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, select
 
 from app.core.database import get_db
+from app.core.roles import TRANSACTION_ROLES, CLIENT_ACCESS_ROLES
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
@@ -75,7 +76,7 @@ def require_role(request: Request, *allowed: str):
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager", "cashier")
+    require_role(request, *TRANSACTION_ROLES)
     settings = get_settings(db, tenant_id=tenant_id)
 
     user_phone = normalize_phone(payload.user_phone)
@@ -200,7 +201,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 @router.post("/{tx_id}/refund", response_model=TransactionOut)
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager")
+    require_role(request, *CLIENT_ACCESS_ROLES)
     settings = get_settings(db, tenant_id=tenant_id)
     now = _now()
 
@@ -323,7 +324,7 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 @router.get("/by-phone/{user_phone}", response_model=List[TransactionOut])
 def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager", "cashier")
+    require_role(request, *TRANSACTION_ROLES)
 
     p = normalize_phone(user_phone)
     p_hash = hashlib.sha256(p.encode()).hexdigest()
@@ -364,7 +365,7 @@ def list_transactions(
     db: Session = Depends(get_db),
 ):
     tenant_id = must_tenant_id(request)
-    require_role(request, "owner", "admin", "manager", "cashier")
+    require_role(request, *TRANSACTION_ROLES)
 
     q = (
         db.query(Transaction, User.phone)

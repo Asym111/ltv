@@ -8,6 +8,7 @@ from sqlalchemy import func, case
 
 from app.core.database import get_db
 from app.core.security import decrypt_field
+from app.core.roles import TRANSACTION_ROLES
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.schemas.crm import ClientMetricsOut
@@ -39,8 +40,16 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") not in allowed:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    return u
+
+
 @router.get("/client/{phone}", response_model=ClientMetricsOut)
 def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_db)) -> ClientMetricsOut:
+    require_role(request, *TRANSACTION_ROLES)
     tenant_id = must_tenant_id(request)
     p = normalize_phone(phone)
     p_hash = hashlib.sha256(p.encode()).hexdigest()

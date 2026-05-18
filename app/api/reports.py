@@ -13,6 +13,7 @@ from openpyxl import Workbook
 
 from app.core.database import get_db
 from app.core.security import decrypt_field
+from app.core.roles import ANALYTICS_ROLES
 from app.core.tenant_utils import get_tenant_ids_for_user
 from app.models.bonus_grant import BonusGrant
 from app.models.user import User
@@ -29,6 +30,13 @@ def must_tenant_id(request: Request) -> int:
     return int(tid)
 
 
+def require_role(request: Request, *allowed: str):
+    u = getattr(request.state, "user", None) or {}
+    if u.get("role") not in allowed:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    return u
+
+
 # ── Отчёт по сгоревшим бонусам ───────────────────────────────
 @router.get("/expired-bonuses")
 def expired_bonuses(
@@ -39,6 +47,7 @@ def expired_bonuses(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
 
     q = (
@@ -81,6 +90,7 @@ def birthdays_report(
     year: Optional[int] = Query(default=None, description="Год, по умолчанию текущий"),
     db: Session = Depends(get_db),
 ):
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
     if not year:
         year = date.today().year
@@ -120,6 +130,7 @@ def transactions_excel(
     date_to: Optional[str] = Query(default=None, description="YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
+    require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
 
     q = (
@@ -175,7 +186,7 @@ def super_tenant_overview(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Общая аналитика по всем тенантам группы. Доступно только owner."""
+    require_role(request, "owner")
     tenant_ids = get_tenant_ids_for_user(request, db)
     if len(tenant_ids) <= 1:
         raise HTTPException(status_code=400, detail="No branches found. Create child tenants first.")
