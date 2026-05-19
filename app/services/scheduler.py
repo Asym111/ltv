@@ -64,7 +64,8 @@ def send_birthday_greetings():
                     amount=amount,
                     expires_at=(now_dt + timedelta(days=max(1, int(settings.bday_bonus_burn_days or 14)))).strftime("%d.%m.%Y"),
                 )
-                send_message(user.phone, msg)
+                # ВАЖНО: передаём tenant_id, чтобы сообщение ушло через WhatsApp нужного филиала
+                send_message(user.phone, msg, tenant_id=str(user.tenant_id))
 
             except Exception:
                 db.rollback()
@@ -93,7 +94,8 @@ def send_burn_reminders():
                     continue
                 try:
                     msg = f"Внимание! {grant.remaining} бонусов сгорят через {days_before} дн. ({target_date.strftime('%d.%m.%Y')}). Успейте использовать!"
-                    send_message(user.phone, msg)
+                    # ВАЖНО: передаём tenant_id владельца бонуса
+                    send_message(user.phone, msg, tenant_id=str(user.tenant_id))
                 except Exception:
                     pass
     finally:
@@ -161,7 +163,8 @@ def check_tier_downgrade():
                 if user.phone:
                     try:
                         msg = f"Ваш уровень лояльности понижен до {user.tier} из-за длительного отсутствия покупок. Совершите покупку чтобы вернуть уровень!"
-                        send_message(user.phone, msg)
+                        # ВАЖНО: передаём tenant_id клиента
+                        send_message(user.phone, msg, tenant_id=str(user.tenant_id))
                     except Exception:
                         pass
     except Exception:
