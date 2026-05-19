@@ -7,7 +7,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.services.whatsapp import get_status, get_qr, logout, send_message, send_campaign_messages, render_template
+from app.services.whatsapp import (
+    get_status,
+    get_qr,
+    logout,
+    send_message,
+    send_campaign_messages,
+    render_template,
+)
 from app.services.campaigns import get_campaign
 from app.models.campaign import CampaignRecipient
 
@@ -49,25 +56,29 @@ def require_role(request: Request, *allowed: str):
 @router.get("/status")
 def whatsapp_status(request: Request):
     require_role(request, "owner", "admin", "manager")
-    return get_status()
+    tenant_id = must_tenant_id(request)
+    return get_status(tenant_id=str(tenant_id))
 
 
 @router.get("/qr")
 def whatsapp_qr(request: Request):
     require_role(request, "owner", "admin")
-    return get_qr()
+    tenant_id = must_tenant_id(request)
+    return get_qr(tenant_id=str(tenant_id))
 
 
 @router.post("/logout")
 def whatsapp_logout(request: Request):
     require_role(request, "owner", "admin")
-    return logout()
+    tenant_id = must_tenant_id(request)
+    return logout(tenant_id=str(tenant_id))
 
 
 @router.post("/send")
 def whatsapp_send_one(payload: SendOneIn, request: Request):
     require_role(request, "owner", "admin", "manager")
-    result = send_message(payload.phone, payload.message)
+    tenant_id = must_tenant_id(request)
+    result = send_message(payload.phone, payload.message, tenant_id=str(tenant_id))
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Ошибка отправки"))
     return result
@@ -108,6 +119,7 @@ def whatsapp_send_campaign(
         recipients=recipients,
         template=payload.template,
         dry_run=payload.dry_run,
+        tenant_id=str(tenant_id),
     )
     return {"campaign_id": payload.campaign_id, "campaign_name": campaign.name, "dry_run": payload.dry_run, **result}
 
