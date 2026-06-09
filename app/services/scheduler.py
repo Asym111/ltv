@@ -2,20 +2,46 @@
 Фоновые задачи: уведомления о днях рождения и сгорании бонусов.
 """
 from datetime import datetime, timedelta, date
+import logging
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.database import SessionLocal
+from app.core.security import decrypt_field
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
 from app.models.transaction import Transaction
 from app.services.whatsapp import send_message
 
+logger = logging.getLogger(__name__)
+
 scheduler = BackgroundScheduler()
 
 # Период неактивности для даунгрейда тира (дней)
 TIER_DOWNGRADE_DAYS = 90
+
+# За сколько дней до сгорания напоминать
+BURN_REMINDER_DAYS = [15, 7, 3, 1]
+
+
+def _safe_phone(user) -> str | None:
+    """Расшифровывает телефон клиента. Возвращает None если не получилось."""
+    raw = decrypt_field(user.phone)
+    if not raw:
+        return None
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if len(digits) < 10:
+        return None
+    return digits
+
+
+def _safe_name(user) -> str:
+    """Расшифровывает имя клиента, с фолбэком."""
+    raw = decrypt_field(user.full_name)
+    name = (raw or "").strip()
+    return name or "клиент"
 
 
 def send_birthday_greetings():
@@ -33,7 +59,8 @@ def send_birthday_greetings():
             .all()
         )
         for user in users:
-            if not user.phone:
+            phone = _safe_phone(user)
+            if not phone:
                 continue
             try:
                 from app.services.loyalty_engine import get_settings
@@ -58,26 +85,31 @@ def send_birthday_greetings():
                     db.add(grant)
                     db.commit()
 
-                name = user.full_name or "клиент"
+                name = _safe_name(user)
                 msg = app_settings.BDAY_MESSAGE_TEMPLATE.format(
                     name=name,
                     amount=amount,
                     expires_at=(now_dt + timedelta(days=max(1, int(settings.bday_bonus_burn_days or 14)))).strftime("%d.%m.%Y"),
                 )
-                # ВАЖНО: передаём tenant_id, чтобы сообщение ушло через WhatsApp нужного филиала
-                send_message(user.phone, msg, tenant_id=str(user.tenant_id))
+                send_message(phone, msg, tenant_id=str(user.tenant_id))
 
-            except Exception:
+            except Exception as e:
                 db.rollback()
+                logger.warning(f"birthday greeting failed for user {user.id}: {e}")
     finally:
         db.close()
 
 
 def send_burn_reminders():
+    """
+    Напоминания о скором сгорании бонусов.
+    Группируем по клиенту: если у клиента несколько грантов сгорают в один день,
+    отправляем ОДНО сообщение с суммарным количеством, а не несколько подряд.
+    """
     db: Session = SessionLocal()
     try:
         today = date.today()
-        for days_before in [7, 3, 1]:
+        for days_before in BURN_REMINDER_DAYS:
             target_date = today + timedelta(days=days_before)
             grants = (
                 db.query(BonusGrant)
@@ -88,16 +120,43 @@ def send_burn_reminders():
                 )
                 .all()
             )
+
+            # Группируем remaining по user_id
+            by_user: dict[int, int] = {}
             for grant in grants:
-                user = db.query(User).filter(User.id == grant.user_id).first()
-                if not user or not user.phone:
+                by_user[grant.user_id] = by_user.get(grant.user_id, 0) + int(grant.remaining or 0)
+
+            for user_id, total_remaining in by_user.items():
+                if total_remaining <= 0:
                     continue
-                try:
-                    msg = f"Внимание! {grant.remaining} бонусов сгорят через {days_before} дн. ({target_date.strftime('%d.%m.%Y')}). Успейте использовать!"
-                    # ВАЖНО: передаём tenant_id владельца бонуса
-                    send_message(user.phone, msg, tenant_id=str(user.tenant_id))
-                except Exception:
-                    pass
+                user = db.query(User).filter(User.id == user_id).first()
+                if not user:
+                    continue
+                phone = _safe_phone(user)
+                if not phone:
+                    continue
+
+                name = _safe_name(user)
+                # Склонение слова "день"
+                if days_before == 1:
+                    day_word = "1 день"
+                elif days_before in (3,):
+                    day_word = f"{days_before} дня"
+                else:
+                    day_word = f"{days_before} дней"
+
+                msg = (
+                    f"{name}, напоминаем: у вас {total_remaining} бонусов сгорят через "
+                    f"{day_word} ({target_date.strftime('%d.%m.%Y')}). "
+                    f"Успейте использовать при следующей покупке!"
+                )
+
+                result = send_message(phone, msg, tenant_id=str(user.tenant_id))
+                if not result.get("ok"):
+                    logger.warning(
+                        f"burn reminder failed user={user_id} tenant={user.tenant_id}: "
+                        f"{result.get('error')}"
+                    )
     finally:
         db.close()
 
@@ -119,8 +178,9 @@ def process_pending_bonuses():
         for grant in grants:
             grant.status = "available"
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
+        logger.warning(f"process_pending_bonuses failed: {e}")
     finally:
         db.close()
 
@@ -160,15 +220,21 @@ def check_tier_downgrade():
                 db.commit()
 
                 # Уведомление клиенту
-                if user.phone:
+                phone = _safe_phone(user)
+                if phone:
                     try:
-                        msg = f"Ваш уровень лояльности понижен до {user.tier} из-за длительного отсутствия покупок. Совершите покупку чтобы вернуть уровень!"
-                        # ВАЖНО: передаём tenant_id клиента
-                        send_message(user.phone, msg, tenant_id=str(user.tenant_id))
-                    except Exception:
-                        pass
-    except Exception:
+                        name = _safe_name(user)
+                        msg = (
+                            f"{name}, ваш уровень лояльности понижен до {user.tier} "
+                            f"из-за длительного отсутствия покупок. "
+                            f"Совершите покупку чтобы вернуть уровень!"
+                        )
+                        send_message(phone, msg, tenant_id=str(user.tenant_id))
+                    except Exception as e:
+                        logger.warning(f"tier downgrade notify failed user={user.id}: {e}")
+    except Exception as e:
         db.rollback()
+        logger.warning(f"check_tier_downgrade failed: {e}")
     finally:
         db.close()
 
