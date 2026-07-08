@@ -21,6 +21,7 @@ from sqlalchemy import desc, select
 
 from app.core.database import get_db
 from app.core.roles import TRANSACTION_ROLES, CLIENT_ACCESS_ROLES
+from app.core.tenant_utils import must_network_id
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
@@ -75,7 +76,8 @@ def require_role(request: Request, *allowed: str):
 
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_tenant_id(request)          # филиал, где проходит продажа
+    network_id = must_network_id(request)        # клиенты общие на сеть
     require_role(request, *TRANSACTION_ROLES)
     settings = get_settings(db, tenant_id=tenant_id)
 
@@ -84,13 +86,13 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     phone_hash = hashlib.sha256(user_phone.encode()).hexdigest()
     user = (
         db.query(User)
-        .filter(User.tenant_id == tenant_id)
+        .filter(User.tenant_id == network_id)
         .filter(User.phone_hash == phone_hash)
         .first()
     )
     if not user:
         user = User(
-            tenant_id=tenant_id,
+            tenant_id=network_id,
             phone=encrypt_field(user_phone),
             phone_hash=hashlib.sha256(user_phone.encode()).hexdigest(),
             full_name=encrypt_field(payload.full_name or ""),
@@ -144,7 +146,7 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     db.commit()
     db.refresh(txn)
 
-    grant_purchase_bonus(db, user_id=user.id, earn=earned, settings=settings, txn_id=txn.id)
+    grant_purchase_bonus(db, user_id=user.id, earn=earned, settings=settings, txn_id=txn.id, tenant_id=tenant_id)
 
     balances2 = get_balances(db, user_id=user.id)
     user.bonus_balance = int(balances2["total"])
@@ -153,9 +155,10 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
         tiers_cfg = settings.tiers_json or []
         if tiers_cfg:
             from sqlalchemy import func as _func
+            # Тир накопительный по всей сети (кошелёк общий)
             total_spent = int(
                 db.query(_func.coalesce(_func.sum(Transaction.paid_amount), 0))
-                .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
+                .filter(Transaction.user_id == user.id)
                 .scalar() or 0
             )
             sorted_tiers = sorted(
@@ -177,9 +180,13 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     if redeemed > 0 and user.phone:
         try:
             from app.services.whatsapp import send_message
+            from app.services.broadcast_worker import log_wa_message
             phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Списано {redeemed} бонусов. Баланс: {int(balances2['total'])}."
-            send_message(phone_for_wa, msg)
+            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
+            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
+                           status="sent" if res.get("ok") else "failed",
+                           text=msg, user_id=user.id, error=res.get("error"))
         except Exception:
             pass
 
@@ -187,9 +194,13 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
     if earned > 0 and user.phone:
         try:
             from app.services.whatsapp import send_message
+            from app.services.broadcast_worker import log_wa_message
             phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Вам начислено {earned} бонусов! Баланс: {int(balances2['total'])}. Спасибо за покупку!"
-            send_message(phone_for_wa, msg)
+            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
+            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
+                           status="sent" if res.get("ok") else "failed",
+                           text=msg, user_id=user.id, error=res.get("error"))
         except Exception:
             pass
 
@@ -240,7 +251,7 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 
     user = (
         db.query(User)
-        .filter(User.tenant_id == tenant_id)
+        .filter(User.tenant_id == must_network_id(request))
         .filter(User.id == tx.user_id)
         .first()
     )
@@ -252,6 +263,7 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
         expires_at = now + timedelta(days=int(settings.burn_days))
         g = BonusGrant(
             user_id=user.id,
+            tenant_id=tenant_id,
             transaction_id=tx.id,
             amount=redeem_return,
             remaining=redeem_return,
@@ -311,10 +323,14 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     if user.phone:
         try:
             from app.services.whatsapp import send_message
+            from app.services.broadcast_worker import log_wa_message
             balances2 = get_balances(db, user_id=user.id)
             phone_for_wa = decrypt_field(user.phone) or user.phone
             msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
-            send_message(phone_for_wa, msg)
+            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
+            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
+                           status="sent" if res.get("ok") else "failed",
+                           text=msg, user_id=user.id, error=res.get("error"))
         except Exception:
             pass
 
@@ -323,23 +339,23 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
 
 @router.get("/by-phone/{user_phone}", response_model=List[TransactionOut])
 def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_db)):
-    tenant_id = must_tenant_id(request)
+    network_id = must_network_id(request)
     require_role(request, *TRANSACTION_ROLES)
 
     p = normalize_phone(user_phone)
     p_hash = hashlib.sha256(p.encode()).hexdigest()
     user = (
         db.query(User)
-        .filter(User.tenant_id == tenant_id)
+        .filter(User.tenant_id == network_id)
         .filter(User.phone_hash == p_hash)
         .first()
     )
     if not user:
         return []
 
+    # История клиента по всей сети (карточка клиента)
     rows = (
         db.query(Transaction)
-        .filter(Transaction.tenant_id == tenant_id)
         .filter(Transaction.user_id == user.id)
         .order_by(desc(Transaction.id))
         .all()
@@ -371,7 +387,7 @@ def list_transactions(
         db.query(Transaction, User.phone)
         .join(User, User.id == Transaction.user_id)
         .filter(Transaction.tenant_id == tenant_id)
-        .filter(User.tenant_id == tenant_id)
+        .filter(User.tenant_id == must_network_id(request))
     )
 
     if phone:

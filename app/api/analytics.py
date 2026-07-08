@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.roles import ANALYTICS_ROLES
+from app.core.tenant_utils import must_network_id
 from app.schemas.analytics import AnalyticsOverviewOut, AnalyticsSegmentClientsOut
 from app.services.analytics import build_analytics_overview, list_clients_by_segment
 
@@ -29,7 +30,11 @@ def require_role(request: Request, *allowed: str):
 def analytics_overview(request: Request, db: Session = Depends(get_db)) -> AnalyticsOverviewOut:
     require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
-    data = build_analytics_overview(db, tenant_id=tenant_id)
+    data = build_analytics_overview(
+        db,
+        tenant_id=tenant_id,
+        client_tenant_id=must_network_id(request),
+    )
     return AnalyticsOverviewOut.model_validate(data)
 
 
@@ -59,5 +64,6 @@ def analytics_segment_clients(
         m_min=m_min,
         q=q,
         sort=sort,
+        client_tenant_id=must_network_id(request),
     )
     return AnalyticsSegmentClientsOut.model_validate(data)

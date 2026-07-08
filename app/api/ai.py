@@ -159,6 +159,7 @@ async def _try_llm(
 # Client payload builder
 # =========================
 def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = None) -> dict[str, Any]:
+    """tenant_id здесь — корень сети (клиенты и их история общие на сеть)."""
     import hashlib
     phone = _norm_phone(raw_phone)
     p_hash = hashlib.sha256(phone.encode()).hexdigest()
@@ -169,9 +170,8 @@ def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = N
     if not user:
         return {"error": "client_not_found", "phone": phone}
 
+    # История клиента по всей сети (кошелёк общий)
     txq = db.query(Transaction).filter(Transaction.user_id == user.id)
-    if tenant_id:
-        txq = txq.filter(Transaction.tenant_id == tenant_id)
     txs = txq.order_by(Transaction.created_at.desc()).limit(50).all()
 
     total_spent = sum(t.paid_amount for t in txs if t.paid_amount)
@@ -318,8 +318,14 @@ def _heuristic_answer(context: str, payload: dict[str, Any], question: str) -> A
 # Endpoints: overview + ask
 # =========================
 @router.get("/overview")
-async def ai_overview(db: Session = Depends(get_db)) -> AiAskOut:
-    payload = build_overview_payload(db)
+async def ai_overview(request: Request, db: Session = Depends(get_db)) -> AiAskOut:
+    # tenant-aware: без фильтра сюда попадали данные ВСЕХ тенантов
+    current_user = getattr(request.state, "user", None) or {}
+    tenant_id = current_user.get("tenant_id")
+    tenant_id = int(tenant_id) if tenant_id else None
+    network_id = current_user.get("network_id") or tenant_id
+    network_id = int(network_id) if network_id else None
+    payload = build_overview_payload(db, tenant_id=tenant_id, client_tenant_id=network_id)
     question = (
         "Дай краткий обзор бизнеса: что хорошо, что требует внимания, "
         "топ-3 приоритета для роста LTV."
@@ -371,13 +377,15 @@ async def ai_ask(payload_in: AiAskIn, request: Request, db: Session = Depends(ge
     current_user = getattr(request.state, "user", None) or {} if request else {}
     tenant_id = current_user.get("tenant_id")
     tenant_id = int(tenant_id) if tenant_id else None
+    network_id = current_user.get("network_id") or tenant_id
+    network_id = int(network_id) if network_id else None
 
     if context == "business":
-        payload = build_overview_payload(db, tenant_id=tenant_id)
+        payload = build_overview_payload(db, tenant_id=tenant_id, client_tenant_id=network_id)
     else:
         if not payload_in.phone:
             raise HTTPException(status_code=400, detail="phone required for client context")
-        payload = _build_client_payload(db, payload_in.phone, tenant_id=tenant_id)
+        payload = _build_client_payload(db, payload_in.phone, tenant_id=network_id)
 
     last_err: str | None = None
     for prov in _provider_order():
@@ -524,10 +532,11 @@ async def _handle_grant_bonus(
     tenant_id: int | None = None
     current_user = getattr(request.state, "user", None) or {}
     tenant_id = current_user.get("tenant_id")
+    network_id = current_user.get("network_id") or tenant_id
 
     q = db.query(User).filter(User.phone_hash == phone_hash)
-    if tenant_id:
-        q = q.filter(User.tenant_id == int(tenant_id))
+    if network_id:
+        q = q.filter(User.tenant_id == int(network_id))
     user = q.first()
 
     if not user:
@@ -537,6 +546,7 @@ async def _handle_grant_bonus(
     now = datetime.utcnow()
     grant = BonusGrant(
         user_id=user.id,
+        tenant_id=int(tenant_id) if tenant_id else None,
         transaction_id=None,
         amount=amount,
         remaining=amount,

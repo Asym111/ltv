@@ -44,6 +44,24 @@ def _safe_name(user) -> str:
     return name or "клиент"
 
 
+def _log_auto(db, user, phone: str, msg: str, res: dict) -> None:
+    """Best-effort запись авто-уведомления в журнал wa_messages."""
+    try:
+        from app.services.broadcast_worker import log_wa_message
+        log_wa_message(
+            db,
+            tenant_id=int(user.tenant_id),
+            phone=phone,
+            kind="auto",
+            status="sent" if (res or {}).get("ok") else "failed",
+            text=msg,
+            user_id=user.id,
+            error=(res or {}).get("error"),
+        )
+    except Exception:
+        pass
+
+
 def send_birthday_greetings():
     db: Session = SessionLocal()
     try:
@@ -53,8 +71,8 @@ def send_birthday_greetings():
             db.query(User)
             .filter(
                 User.birth_date.isnot(None),
-                db.func.extract('month', User.birth_date) == today.month,
-                db.func.extract('day', User.birth_date) == today.day,
+                func.extract('month', User.birth_date) == today.month,
+                func.extract('day', User.birth_date) == today.day,
             )
             .all()
         )
@@ -67,14 +85,31 @@ def send_birthday_greetings():
                 from app.core.config import settings as app_settings
 
                 settings = get_settings(db, tenant_id=user.tenant_id)
-                amount = int(settings.bday_bonus_amount or 0)
+                if not bool(getattr(settings, "birthday_enabled", True)):
+                    continue
+
+                amount = int(settings.birthday_bonus_amount or 0)
+                burn_days = max(1, int(settings.birthday_bonus_ttl_days or 14))
 
                 if amount > 0:
-                    burn_days = max(1, int(settings.bday_bonus_burn_days or 14))
-                    expires_at = now_dt + timedelta(days=burn_days)
+                    # Не начисляем повторно, если ДР-бонус в этом году уже был
+                    year_start = datetime(today.year, 1, 1)
+                    already = (
+                        db.query(BonusGrant.id)
+                        .filter(
+                            BonusGrant.user_id == user.id,
+                            BonusGrant.source == "birthday",
+                            BonusGrant.created_at >= year_start,
+                        )
+                        .first()
+                    )
+                    if already:
+                        continue
 
+                    expires_at = now_dt + timedelta(days=burn_days)
                     grant = BonusGrant(
                         user_id=user.id,
+                        tenant_id=user.tenant_id,
                         amount=amount,
                         remaining=amount,
                         status="available",
@@ -86,12 +121,17 @@ def send_birthday_greetings():
                     db.commit()
 
                 name = _safe_name(user)
-                msg = app_settings.BDAY_MESSAGE_TEMPLATE.format(
-                    name=name,
-                    amount=amount,
-                    expires_at=(now_dt + timedelta(days=max(1, int(settings.bday_bonus_burn_days or 14)))).strftime("%d.%m.%Y"),
-                )
-                send_message(phone, msg, tenant_id=str(user.tenant_id))
+                template = (getattr(settings, "birthday_message", None) or "").strip() or app_settings.BDAY_MESSAGE_TEMPLATE
+                try:
+                    msg = template.format(
+                        name=name,
+                        amount=amount,
+                        expires_at=(now_dt + timedelta(days=burn_days)).strftime("%d.%m.%Y"),
+                    )
+                except (KeyError, IndexError):
+                    msg = template
+                res = send_message(phone, msg, tenant_id=str(user.tenant_id))
+                _log_auto(db, user, phone, msg, res)
 
             except Exception as e:
                 db.rollback()
@@ -116,7 +156,7 @@ def send_burn_reminders():
                 .filter(
                     BonusGrant.status == "available",
                     BonusGrant.remaining > 0,
-                    db.func.date(BonusGrant.expires_at) == target_date,
+                    func.date(BonusGrant.expires_at) == target_date,
                 )
                 .all()
             )
@@ -152,6 +192,7 @@ def send_burn_reminders():
                 )
 
                 result = send_message(phone, msg, tenant_id=str(user.tenant_id))
+                _log_auto(db, user, phone, msg, result)
                 if not result.get("ok"):
                     logger.warning(
                         f"burn reminder failed user={user_id} tenant={user.tenant_id}: "
@@ -229,7 +270,8 @@ def check_tier_downgrade():
                             f"из-за длительного отсутствия покупок. "
                             f"Совершите покупку чтобы вернуть уровень!"
                         )
-                        send_message(phone, msg, tenant_id=str(user.tenant_id))
+                        res = send_message(phone, msg, tenant_id=str(user.tenant_id))
+                        _log_auto(db, user, phone, msg, res)
                     except Exception as e:
                         logger.warning(f"tier downgrade notify failed user={user.id}: {e}")
     except Exception as e:

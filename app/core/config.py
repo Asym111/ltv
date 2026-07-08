@@ -34,15 +34,12 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "auto"
     AI_MOCK_IF_NO_KEY: bool = True
 
-    # --- WhatsApp / GreenAPI ---
-    GREENAPI_INSTANCE_ID: str | None = None    # ID инстанса из личного кабинета GreenAPI
-    GREENAPI_API_TOKEN: str | None = None      # API токен из личного кабинета GreenAPI
-    # Базовый URL (не менять без причины)
-    GREENAPI_BASE_URL: str = "https://api.green-api.com"
-    
-        # --- WhatsApp Microservice ---
+    # --- WhatsApp Microservice (ltv-wa-service) ---
     WA_SERVICE_URL: str | None = None
     WA_INTERNAL_TOKEN: str | None = None
+
+    # --- WhatsApp broadcast worker ---
+    BROADCAST_WORKER_ENABLED: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

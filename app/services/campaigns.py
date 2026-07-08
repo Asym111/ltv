@@ -64,6 +64,10 @@ def build_recipients(db: Session, campaign_id: int, tenant_id: int | None = None
     if not c:
         raise ValueError("Campaign not found")
 
+    # Клиенты хранятся на корне сети (общая база при мультифилиальности)
+    from app.services.loyalty_engine import resolve_network_id
+    client_tid = resolve_network_id(db, c.tenant_id) or c.tenant_id
+
     res = list_clients_by_segment(
         db,
         tenant_id=c.tenant_id,
@@ -75,6 +79,7 @@ def build_recipients(db: Session, campaign_id: int, tenant_id: int | None = None
         m_min=c.m_min,
         q=c.q,
         sort=c.sort,
+        client_tenant_id=client_tid,
     )
     items = res.get("items") or []
 

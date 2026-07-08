@@ -14,6 +14,9 @@ class BonusGrant(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
+    # Филиал (тенант), в котором начислен бонус — для отчётов по филиалам
+    tenant_id = Column(Integer, nullable=True, index=True)
+
     # ✅ Связь начисления с транзакцией (для корректных возвратов)
     transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, index=True)
 

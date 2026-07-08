@@ -26,13 +26,19 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
-def calc_overview_numbers(db: Session, tenant_id: int | None = None, now: datetime | None = None) -> OverviewNumbers:
+def calc_overview_numbers(
+    db: Session,
+    tenant_id: int | None = None,
+    now: datetime | None = None,
+    client_tenant_id: int | None = None,
+) -> OverviewNumbers:
     now = now or _utcnow()
     since_30d = now - timedelta(days=30)
 
+    ctid = client_tenant_id or tenant_id  # клиенты хранятся на корне сети
     uq = db.query(func.count(User.id))
-    if tenant_id:
-        uq = uq.filter(User.tenant_id == tenant_id)
+    if ctid:
+        uq = uq.filter(User.tenant_id == ctid)
     clients = int(uq.scalar() or 0)
 
     txq_base = db.query(Transaction)
@@ -122,7 +128,11 @@ def _jsonable(v: Any) -> Any:
     return v
 
 
-def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[str, Any]:
+def build_overview_payload(
+    db: Session,
+    tenant_id: int | None = None,
+    client_tenant_id: int | None = None,
+) -> dict[str, Any]:
     """
     Расширенный payload для AI:
     - тренды выручки (7д / 30д / vs предыдущий 30д)
@@ -138,6 +148,8 @@ def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[st
     since_7d  = now - timedelta(days=7)
     since_60d = now - timedelta(days=60)
 
+    _client_tid = client_tenant_id or tenant_id  # клиенты хранятся на корне сети
+
     def _txq():
         q = db.query(Transaction)
         if tenant_id:
@@ -146,8 +158,8 @@ def build_overview_payload(db: Session, tenant_id: int | None = None) -> dict[st
 
     def _userq():
         q = db.query(User)
-        if tenant_id:
-            q = q.filter(User.tenant_id == tenant_id)
+        if _client_tid:
+            q = q.filter(User.tenant_id == _client_tid)
         return q
 
     # ── Кол-во клиентов ──────────────────────────────────────

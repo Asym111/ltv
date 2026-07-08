@@ -155,6 +155,59 @@
       <div id="accUsersErr" class="text-danger small d-none mt-2"></div>
     </div>
 
+    {% if current_user and current_user.role == 'owner' %}
+    <!-- Филиалы -->
+    <div class="card p-3 mt-3" id="accBranchesCard">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div>
+          <div class="h6 mb-0"><i class="bi bi-shop me-1" style="color:var(--mint)"></i> Филиалы</div>
+          <div class="text-muted small">База клиентов и настройки лояльности общие для всей сети. У каждого филиала — свои продажи и свой номер WhatsApp.</div>
+        </div>
+        <button class="btn btn-sm btn-success" type="button" id="accAddBranchBtn">
+          <i class="bi bi-plus-lg me-1"></i> Добавить филиал
+        </button>
+      </div>
+
+      <div id="accBranchCreateBox" class="card p-3 mb-3 d-none" style="border-color: var(--mint) !important;">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-8">
+            <label class="settings-label">Название филиала</label>
+            <input id="accBranchName" type="text" class="settings-input mt-1" placeholder="Например: Филиал Астана">
+          </div>
+          <div class="col-12 col-md-4 d-flex gap-2">
+            <button class="btn btn-sm btn-success flex-grow-1" type="button" id="accBranchCreateBtn">
+              <i class="bi bi-check2-circle me-1"></i> Создать
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="accBranchCancelBtn">✕</button>
+          </div>
+        </div>
+        <div id="accBranchCreateErr" class="text-danger small d-none mt-2"></div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr class="text-muted">
+              <th>Название</th>
+              <th>Статус</th>
+              <th title="Уникальные покупатели точки">Покупатели</th>
+              <th>Транзакции</th>
+              <th>Выручка</th>
+              <th class="text-end">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="accBranchesTbody">
+            <tr><td colspan="6" class="text-muted">Загрузка…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="accBranchesErr" class="text-danger small d-none mt-2"></div>
+      <div class="text-muted small mt-1">
+        <i class="bi bi-info-circle me-1"></i>Переключиться на филиал можно в шапке сайта — все разделы (транзакции, WhatsApp, сотрудники) начнут работать в его контексте.
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Легенда ролей -->
     <div class="card p-3 mt-3">
       <div class="h6 mb-2">Роли и права доступа</div>

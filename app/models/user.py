@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -26,6 +26,9 @@ class User(Base):
     tier = Column(String, default="Bronze", nullable=False)
 
     bonus_balance = Column(Integer, default=0, nullable=False)
+
+    # Отписка от WhatsApp-рассылок (рассылки пропускают клиента)
+    wa_opt_out = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

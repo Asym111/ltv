@@ -106,7 +106,19 @@ def login_post(
                 next_url=next,
             )
 
-        access_until = getattr(tenant, "access_until", None)
+        # Корень сети: филиал живёт на подписке головного тенанта
+        root: Tenant | None = tenant
+        if tenant.parent_tenant_id:
+            root = db.query(Tenant).filter(Tenant.id == tenant.parent_tenant_id).first()
+            if not root or not root.is_active:
+                return render_login(
+                    request,
+                    error="Аккаунт сети отключён. Обратитесь к администратору.",
+                    info=None,
+                    next_url=next,
+                )
+
+        access_until = getattr(root, "access_until", None)
         if access_until is not None and access_until < datetime.utcnow():
             return render_login(
                 request,
@@ -134,9 +146,12 @@ def login_post(
         request.session["name"]             = user.name
         request.session["role"]             = user.role
         request.session["tenant_id"]        = user.tenant_id
+        # Мультифилиальность: домашний тенант, активный контекст и корень сети
+        request.session["home_tenant_id"]   = user.tenant_id
+        request.session["active_tenant_id"] = user.tenant_id
+        request.session["network_id"]       = root.id if root else user.tenant_id
         request.session["csrf_token"]       = secrets.token_hex(32)
         request.session["session_version"]  = user.session_version
-        tenant = db.query(TenantModel).filter(TenantModel.id == user.tenant_id).first()
         request.session["tenant_name"] = tenant.name if tenant else ""
 
         # Безопасный редирект — только внутренние пути

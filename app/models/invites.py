@@ -87,18 +87,22 @@ def accept_invite(payload: AcceptInviteIn, db: Session = Depends(get_db)):
     if datetime.utcnow() > invite.expires_at:
         raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
 
+    # Клиенты хранятся на корне сети
+    from app.services.loyalty_engine import resolve_network_id
+    network_id = resolve_network_id(db, invite.tenant_id) or invite.tenant_id
+
     invite_phone = invite.phone or ""
     if invite_phone:
         p_hash = hashlib.sha256(invite_phone.encode()).hexdigest()
         existing = db.query(User).filter(
-            User.tenant_id == invite.tenant_id,
+            User.tenant_id == network_id,
             User.phone_hash == p_hash,
         ).first()
         if existing:
             raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
 
     user = User(
-        tenant_id=invite.tenant_id,
+        tenant_id=network_id,
         phone=encrypt_field(invite_phone) if invite_phone else "",
         phone_hash=hashlib.sha256(invite_phone.encode()).hexdigest() if invite_phone else None,
         full_name=encrypt_field(payload.full_name),

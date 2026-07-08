@@ -20,7 +20,7 @@ def _utcnow() -> datetime:
     return datetime.now(ALMATY).replace(tzinfo=None)
 
 
-def _window_stats(db: Session, since: datetime, now: datetime, tenant_id: int) -> Dict[str, Any]:
+def _window_stats(db: Session, since: datetime, now: datetime, tenant_ids: List[int]) -> Dict[str, Any]:
     txs = (
         db.query(
             func.count(Transaction.id).label("tx_count"),
@@ -28,7 +28,7 @@ def _window_stats(db: Session, since: datetime, now: datetime, tenant_id: int) -
             func.count(func.distinct(Transaction.user_id)).label("clients"),
         )
         .filter(
-            Transaction.tenant_id == tenant_id,
+            Transaction.tenant_id.in_(tenant_ids),
             Transaction.created_at >= since,
             Transaction.created_at <= now,
         )
@@ -41,7 +41,7 @@ def _window_stats(db: Session, since: datetime, now: datetime, tenant_id: int) -
     return {"revenue": revenue, "transactions": tx_count, "clients": clients, "avg_check": avg_check}
 
 
-def _daily_revenue(db: Session, since: datetime, now: datetime, tenant_id: int) -> List[Dict[str, Any]]:
+def _daily_revenue(db: Session, since: datetime, now: datetime, tenant_ids: List[int]) -> List[Dict[str, Any]]:
     rows = (
         db.query(
             func.date(Transaction.created_at).label("day"),
@@ -49,7 +49,7 @@ def _daily_revenue(db: Session, since: datetime, now: datetime, tenant_id: int) 
             func.count(Transaction.id).label("tx_count"),
         )
         .filter(
-            Transaction.tenant_id == tenant_id,
+            Transaction.tenant_id.in_(tenant_ids),
             Transaction.created_at >= since,
             Transaction.created_at <= now,
         )
@@ -101,7 +101,19 @@ def _segment_matches(key: str, r: int, f: int, m: int, purchases_total: int) -> 
     return False
 
 
-def build_analytics_overview(db: Session, tenant_id: int) -> Dict[str, Any]:
+def build_analytics_overview(
+    db: Session,
+    tenant_id: int,
+    tenant_ids: Optional[List[int]] = None,
+    client_tenant_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    tenant_ids — тенанты, чьи ТРАНЗАКЦИИ учитываем (по умолчанию активный филиал).
+    client_tenant_id — тенант, на котором хранятся КЛИЕНТЫ (корень сети).
+    """
+    tids = [int(x) for x in (tenant_ids or [tenant_id])]
+    ctid = int(client_tenant_id or tenant_id)
+
     now = _utcnow()
     windows_raw = [
         (7,  "7 дней",  now - timedelta(days=7)),
@@ -110,19 +122,19 @@ def build_analytics_overview(db: Session, tenant_id: int) -> Dict[str, Any]:
     ]
     windows = []
     for days, label, since in windows_raw:
-        stats = _window_stats(db, since, now, tenant_id)
+        stats = _window_stats(db, since, now, tids)
         windows.append({"days": days, "label": label, **stats})
 
-    daily_30 = _daily_revenue(db, now - timedelta(days=30), now, tenant_id)
+    daily_30 = _daily_revenue(db, now - timedelta(days=30), now, tids)
 
-    clients_total = int(db.query(func.count(User.id)).filter(User.tenant_id == tenant_id).scalar() or 0)
+    clients_total = int(db.query(func.count(User.id)).filter(User.tenant_id == ctid).scalar() or 0)
     users_with_tx = int(
         db.query(func.count(func.distinct(Transaction.user_id)))
-        .filter(Transaction.tenant_id == tenant_id).scalar() or 0
+        .filter(Transaction.tenant_id.in_(tids)).scalar() or 0
     )
     total_spent = int(
         db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
-        .filter(Transaction.tenant_id == tenant_id).scalar() or 0
+        .filter(Transaction.tenant_id.in_(tids)).scalar() or 0
     )
 
     since_90 = now - timedelta(days=90)
@@ -133,14 +145,14 @@ def build_analytics_overview(db: Session, tenant_id: int) -> Dict[str, Any]:
             func.coalesce(func.sum(Transaction.paid_amount), 0).label("monetary"),
             func.max(Transaction.created_at).label("last_tx"),
         )
-        .filter(Transaction.tenant_id == tenant_id, Transaction.created_at >= since_90)
+        .filter(Transaction.tenant_id.in_(tids), Transaction.created_at >= since_90)
         .group_by(Transaction.user_id)
         .limit(5000)
         .all()
     )
     total_freq_rows = (
         db.query(Transaction.user_id.label("uid"), func.count(Transaction.id).label("total"))
-        .filter(Transaction.tenant_id == tenant_id)
+        .filter(Transaction.tenant_id.in_(tids))
         .group_by(Transaction.user_id)
         .all()
     )
@@ -194,7 +206,12 @@ def list_clients_by_segment(
     m_min: Optional[int] = None,
     q: Optional[str] = None,
     sort: Optional[str] = None,
+    tenant_ids: Optional[List[int]] = None,
+    client_tenant_id: Optional[int] = None,
 ) -> Dict[str, Any]:
+    tids = [int(x) for x in (tenant_ids or [tenant_id])]
+    ctid = int(client_tenant_id or tenant_id)
+
     now = _utcnow()
     since_90 = now - timedelta(days=90)
     seg_info = SEGMENT_DEFS.get(key, {"title": key, "hint": ""})
@@ -206,7 +223,7 @@ def list_clients_by_segment(
             func.coalesce(func.sum(Transaction.paid_amount), 0).label("rev_90"),
             func.max(Transaction.created_at).label("last_tx"),
         )
-        .filter(Transaction.tenant_id == tenant_id, Transaction.created_at >= since_90)
+        .filter(Transaction.tenant_id.in_(tids), Transaction.created_at >= since_90)
         .group_by(Transaction.user_id)
         .limit(3000)
         .all()
@@ -217,12 +234,12 @@ def list_clients_by_segment(
             func.count(Transaction.id).label("total_freq"),
             func.coalesce(func.sum(Transaction.paid_amount), 0).label("total_rev"),
         )
-        .filter(Transaction.tenant_id == tenant_id)
+        .filter(Transaction.tenant_id.in_(tids))
         .group_by(Transaction.user_id)
         .all()
     )
     total_map = {r.uid: (int(r.total_freq), int(r.total_rev)) for r in total_rows}
-    users_map = {u.id: u for u in db.query(User).filter(User.tenant_id == tenant_id).all()}
+    users_map = {u.id: u for u in db.query(User).filter(User.tenant_id == ctid).all()}
     freq_map_90 = {r.uid: r for r in freq_rows}
     uid_set = set(users_map.keys()) if key == "all" else set(freq_map_90.keys())
 

@@ -16,6 +16,18 @@
 <button class="btn btn-sm btn-primary" type="button" id="cdBuildBtn">
   <i class="bi bi-people me-1"></i> Собрать список клиентов
 </button>
+
+<a class="btn btn-sm btn-success" id="cdWaBtn" href="#">
+  <i class="bi bi-whatsapp me-1"></i> Создать рассылку
+</a>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var m = location.pathname.match(/campaigns\/(\d+)/);
+    var id = m ? m[1] : (new URLSearchParams(location.search).get("id") || "");
+    var btn = document.getElementById("cdWaBtn");
+    if (btn && id) btn.href = "/admin/whatsapp?campaign_id=" + id;
+  });
+</script>
 {% endblock %}
 
 {% block content %}

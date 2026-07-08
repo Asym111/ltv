@@ -21,6 +21,7 @@ class UserUpdate(BaseModel):
     birth_date: date | None = None
     tier: str | None = None
     bonus_balance: int | None = Field(default=None, ge=0)
+    wa_opt_out: bool | None = None
 
 
 class UserOut(BaseModel):
@@ -32,4 +33,5 @@ class UserOut(BaseModel):
     birth_date: date | None
     tier: str
     bonus_balance: int
+    wa_opt_out: bool = False
     created_at: datetime

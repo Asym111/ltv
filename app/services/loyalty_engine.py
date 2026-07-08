@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
+from app.core.config import settings as env_settings
 from app.models.settings_model import Settings
 from app.models.bonus_grant import BonusGrant
 
@@ -16,32 +17,86 @@ def _now() -> datetime:
     return datetime.now(ALMATY).replace(tzinfo=None)
 
 
+def resolve_network_id(db: Session, tenant_id: int | None) -> int | None:
+    """
+    Корень сети для тенанта: если это филиал (parent_tenant_id задан) —
+    возвращает id головного тенанта, иначе сам tenant_id.
+    """
+    if not tenant_id:
+        return None
+    from app.models.auth import Tenant
+    t = db.get(Tenant, int(tenant_id))
+    if t is not None and t.parent_tenant_id:
+        return int(t.parent_tenant_id)
+    return int(tenant_id)
+
+
+def get_or_create_settings(db: Session, tenant_id: int | None = None) -> Settings:
+    """
+    Настройки тенанта. Если своих нет — создаёт копию глобального шаблона
+    (tenant_id IS NULL) или дефолты из env. НИКОГДА не возвращает строку
+    другого тенанта.
+    """
+    if tenant_id:
+        row = db.query(Settings).filter(Settings.tenant_id == tenant_id).first()
+        if row:
+            return row
+        template = db.query(Settings).filter(Settings.tenant_id == None).first()  # noqa: E711
+    else:
+        row = db.query(Settings).filter(Settings.tenant_id == None).first()  # noqa: E711
+        if row:
+            return row
+        template = None
+
+    d = {}
+    if template:
+        for col in template.__table__.columns:
+            if col.name not in ("id", "tenant_id", "created_at"):
+                d[col.name] = getattr(template, col.name)
+
+    row = Settings(
+        tenant_id=tenant_id,
+        bonus_name=d.get("bonus_name", "баллы"),
+        earn_bronze_percent=d.get("earn_bronze_percent", int(env_settings.BONUS_PERCENT_BRONZE)),
+        earn_silver_percent=d.get("earn_silver_percent", int(env_settings.BONUS_PERCENT_SILVER)),
+        earn_gold_percent=d.get("earn_gold_percent",   int(env_settings.BONUS_PERCENT_GOLD)),
+        welcome_bonus_percent=d.get("welcome_bonus_percent", 0),
+        redeem_max_percent=d.get("redeem_max_percent", int(env_settings.REDEEM_MAX_PERCENT)),
+        activation_days=d.get("activation_days", int(env_settings.BONUS_ACTIVATION_DAYS)),
+        burn_days=d.get("burn_days", int(env_settings.BONUS_BURN_DAYS)),
+        burn_percent=d.get("burn_percent", 100),
+        birthday_bonus_amount=d.get("birthday_bonus_amount", int(env_settings.BDAY_BONUS_AMOUNT)),
+        birthday_bonus_days_before=d.get("birthday_bonus_days_before", 7),
+        birthday_bonus_ttl_days=d.get("birthday_bonus_ttl_days", 30),
+        birthday_notify_7d=d.get("birthday_notify_7d", True),
+        birthday_notify_3d=d.get("birthday_notify_3d", True),
+        birthday_notify_1d=d.get("birthday_notify_1d", True),
+        birthday_enabled=d.get("birthday_enabled", True),
+        boost_enabled=d.get("boost_enabled", False),
+        boost_percent=d.get("boost_percent", 7),
+        boost_always=d.get("boost_always", False),
+        boost_mode=d.get("boost_mode", "days"),
+        boost_weekdays=d.get("boost_weekdays"),
+        boost_dates=d.get("boost_dates"),
+        silver_threshold=d.get("silver_threshold", 50000),
+        gold_threshold=d.get("gold_threshold", 200000),
+        cost_per_lead=d.get("cost_per_lead", 0),
+        cost_per_client=d.get("cost_per_client", 0),
+        tiers_json=d.get("tiers_json"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def get_settings(db: Session, tenant_id: int | None = None) -> Settings:
     """
-    Возвращает настройки для тенанта.
-    Если для тенанта нет своих настроек — берём глобальные (tenant_id IS NULL).
+    Настройки лояльности для тенанта. Для филиала возвращаются настройки
+    корня сети — программа лояльности одна на всю сеть.
     """
-    # Сначала ищем настройки конкретного тенанта
-    if tenant_id:
-        s = db.scalar(
-            select(Settings)
-            .where(Settings.tenant_id == tenant_id)
-            .limit(1)
-        )
-        if s:
-            return s
-
-    # Fallback — глобальные настройки (первая запись)
-    s = db.scalar(select(Settings).order_by(Settings.id.asc()).limit(1))
-    if s:
-        return s
-
-    # Создаём дефолтные глобальные настройки
-    s = Settings()
-    db.add(s)
-    db.commit()
-    db.refresh(s)
-    return s
+    network_id = resolve_network_id(db, tenant_id)
+    return get_or_create_settings(db, tenant_id=network_id)
 
 
 def _clamp_int(x: int, lo: int, hi: int) -> int:
@@ -247,6 +302,7 @@ def grant_purchase_bonus(
     settings: Settings,
     txn_id: int | None = None,
     now: datetime | None = None,
+    tenant_id: int | None = None,
 ) -> None:
     now = now or _now()
     earn = int(earn or 0)
@@ -264,6 +320,7 @@ def grant_purchase_bonus(
 
     g = BonusGrant(
         user_id=user_id,
+        tenant_id=tenant_id,
         transaction_id=txn_id,
         amount=earn,
         remaining=earn,

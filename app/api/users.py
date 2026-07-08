@@ -12,6 +12,7 @@ from sqlalchemy import func
 from app.core.database import get_db
 from app.core.security import encrypt_field, decrypt_field
 from app.core.roles import CLIENT_ACCESS_ROLES, ANALYTICS_ROLES
+from app.core.tenant_utils import must_network_id
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.bonus_grant import BonusGrant
@@ -53,7 +54,7 @@ def require_role(request: Request, *allowed: str):
 
 @router.get("/", response_model=list[UserOut])
 def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]:
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *CLIENT_ACCESS_ROLES)
     users = db.query(User).filter(User.tenant_id == tenant_id).order_by(User.id.desc()).all()
     result = []
@@ -67,7 +68,7 @@ def list_users(request: Request, db: Session = Depends(get_db)) -> list[UserOut]
 
 @router.post("", response_model=UserOut)
 def create_user(payload: UserCreate, request: Request, db: Session = Depends(get_db)) -> UserOut:
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *CLIENT_ACCESS_ROLES)
     phone = normalize_phone(payload.phone)
     if not phone:
@@ -93,7 +94,7 @@ def create_user(payload: UserCreate, request: Request, db: Session = Depends(get
 
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)) -> UserOut:
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *CLIENT_ACCESS_ROLES)
     user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
@@ -106,6 +107,8 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
         user.tier = payload.tier
     if payload.bonus_balance is not None:
         user.bonus_balance = int(payload.bonus_balance)
+    if payload.wa_opt_out is not None:
+        user.wa_opt_out = bool(payload.wa_opt_out)
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)
@@ -116,7 +119,7 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
 @router.delete("/{user_id}")
 def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     """Удаление клиента. Только owner/admin."""
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *ANALYTICS_ROLES)
     user = db.query(User).filter(User.tenant_id == tenant_id, User.id == user_id).first()
     if not user:
@@ -139,7 +142,7 @@ def anonymize_user_by_phone(
     Персональные данные заменяются на анонимные, транзакции сохраняются.
     Доступ: owner, admin. Также может использоваться для самоудаления.
     """
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *ANALYTICS_ROLES)
 
     phone_clean = normalize_phone(phone)
@@ -181,7 +184,7 @@ def gdpr_delete_user(
     Удаляются все данные: клиент, его транзакции, бонусы.
     Доступ: owner, admin.
     """
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *ANALYTICS_ROLES)
 
     phone_clean = normalize_phone(phone)
@@ -217,7 +220,7 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
 
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *CLIENT_ACCESS_ROLES)
 
     rows = (
@@ -226,7 +229,7 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
             func.coalesce(func.sum(Transaction.paid_amount), 0).label("total_spent"),
             func.count(Transaction.id).label("tx_count"),
         )
-        .outerjoin(Transaction, (Transaction.user_id == User.id) & (Transaction.tenant_id == tenant_id))
+        .outerjoin(Transaction, Transaction.user_id == User.id)
         .filter(User.tenant_id == tenant_id)
         .group_by(User.id)
         .order_by(User.id)
@@ -314,7 +317,7 @@ def import_users_excel(
     """Импорт клиентов из Excel."""
     import openpyxl
 
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть — храним на корне
     require_role(request, *CLIENT_ACCESS_ROLES)
 
     if not file.filename.endswith((".xlsx", ".xls")):

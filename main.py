@@ -42,6 +42,7 @@ from app.api.campaigns import router as campaigns_router
 from app.api.accounts_api import router as accounts_router
 from app.api.videos_api import router as videos_router
 from app.api.whatsapp import router as whatsapp_router
+from app.api.broadcasts import router as broadcasts_router
 from app.api.reports import router as reports_router
 from app.api.tasks import router as tasks_router
 from app.models.invites import router as invites_router
@@ -51,8 +52,7 @@ from app.web.admin_campaigns import router as admin_campaigns_router
 from app.web.auth import router as auth_router
 from app.web.admin_accounts_web import router as admin_accounts_router
 from app.web.admin_videos_web import router as admin_videos_router
-from app.web.admin_whatsapp import router as admin_whatsapp_router  
-from app.web.superadmin import router as superadmin_router  
+from app.web.superadmin import router as superadmin_router
 
 from app.services.scheduler import start_scheduler
 
@@ -61,6 +61,7 @@ import app.models  # noqa: F401
 import app.models.campaign  # noqa: F401
 import app.models.auth  # noqa: F401
 import app.models.invite  # noqa: F401
+import app.models.broadcast  # noqa: F401
 
 from app.models.auth import AuthUser
 
@@ -135,6 +136,10 @@ app.add_middleware(
 # -------------------------
 Base.metadata.create_all(bind=engine)
 
+# Лёгкие миграции: добавляют недостающие колонки в существующие таблицы
+from app.core.migrations import run_startup_migrations
+run_startup_migrations(engine)
+
 # -------------------------
 # Static
 # -------------------------
@@ -207,12 +212,18 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
         uid = sess.get("uid")
 
         if uid:
+            # Мультифилиальность: tenant_id = активный контекст (филиал),
+            # network_id = корень сети (общая база клиентов и настройки)
+            home_tid = sess.get("home_tenant_id") or sess.get("tenant_id")
+            active_tid = sess.get("active_tenant_id") or home_tid
             request.state.user = {
-                "id":        sess.get("uid"),
-                "phone":     sess.get("phone"),
-                "name":      sess.get("name"),
-                "role":      sess.get("role"),
-                "tenant_id": sess.get("tenant_id"),
+                "id":             sess.get("uid"),
+                "phone":          sess.get("phone"),
+                "name":           sess.get("name"),
+                "role":           sess.get("role"),
+                "tenant_id":      active_tid,
+                "home_tenant_id": home_tid,
+                "network_id":     sess.get("network_id") or home_tid,
             }
         else:
             request.state.user = None
@@ -265,12 +276,29 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                     status_code=303,
                 )
 
-            tenant_id = sess.get("tenant_id")
-            if tenant_id:
+            home_tid = sess.get("home_tenant_id") or sess.get("tenant_id")
+            active_tid = sess.get("active_tenant_id") or home_tid
+            if active_tid:
                 from app.models.auth import Tenant
                 db = SessionLocal()
                 try:
-                    t = db.query(Tenant).filter(Tenant.id == int(tenant_id)).first()
+                    t = db.query(Tenant).filter(Tenant.id == int(active_tid)).first()
+
+                    # Активный филиал недоступен или не из нашей сети → домой
+                    if str(active_tid) != str(home_tid):
+                        valid_branch = (
+                            t is not None
+                            and bool(getattr(t, "is_active", False))
+                            and t.parent_tenant_id is not None
+                            and str(t.parent_tenant_id) == str(home_tid)
+                        )
+                        if not valid_branch:
+                            request.session["active_tenant_id"] = home_tid
+                            active_tid = home_tid
+                            t = db.query(Tenant).filter(Tenant.id == int(home_tid)).first()
+                            if request.state.user is not None:
+                                request.state.user["tenant_id"] = home_tid
+
                     if not t or not bool(getattr(t, "is_active", False)):
                         request.session.clear()
                         if path.startswith("/api"):
@@ -280,7 +308,26 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
                             status_code=303,
                         )
 
-                    access_until = getattr(t, "access_until", None)
+                    # Корень сети: подписка и is_active проверяются по нему
+                    root = t
+                    if t.parent_tenant_id:
+                        root = db.query(Tenant).filter(Tenant.id == int(t.parent_tenant_id)).first()
+                        if not root or not bool(getattr(root, "is_active", False)):
+                            request.session.clear()
+                            if path.startswith("/api"):
+                                return JSONResponse({"detail": "Account disabled"}, status_code=403)
+                            return RedirectResponse(
+                                url=f"/auth?next={quote('/admin')}&e=disabled",
+                                status_code=303,
+                            )
+
+                    network_id = root.id if root else int(active_tid)
+                    if request.state.user is not None:
+                        request.state.user["network_id"] = network_id
+                    if sess.get("network_id") != network_id:
+                        request.session["network_id"] = network_id
+
+                    access_until = getattr(root, "access_until", None) if root else None
                     if access_until is not None and access_until < datetime.utcnow():
                         request.session.clear()
                         if path.startswith("/api"):
@@ -347,6 +394,16 @@ app.add_middleware(
 
 
 @app.on_event("startup")
+def start_broadcast_worker_on_boot():
+    """
+    Воркер WhatsApp-рассылок: стартует после create_all и миграций,
+    сам подхватывает running-рассылки из БД (возобновление после рестарта).
+    """
+    from app.services.broadcast_worker import start_broadcast_worker
+    start_broadcast_worker()
+
+
+@app.on_event("startup")
 def bootstrap_owner():
     from app.models.auth import Tenant, AuthUser
     from app.core.security import normalize_phone, hash_password
@@ -406,7 +463,7 @@ app.include_router(admin_accounts_router)
 app.include_router(videos_router, prefix="/api")
 app.include_router(admin_videos_router)
 app.include_router(whatsapp_router, prefix="/api")
-app.include_router(admin_whatsapp_router)
+app.include_router(broadcasts_router, prefix="/api")
 app.include_router(superadmin_router)
 
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Column, Integer, DateTime, String, Boolean, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, DateTime, String, Boolean, Text, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
+
+# На PostgreSQL — JSONB (как раньше), на SQLite — обычный JSON.
+# Чистый JSONB не компилируется на SQLite и ронял create_all при первом запуске.
+JSONColumn = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Settings(Base):
@@ -51,8 +55,8 @@ class Settings(Base):
     silver_threshold = Column(Integer, default=50000,  nullable=False)
     gold_threshold   = Column(Integer, default=200000, nullable=False)
 
-    # --- Тиры — JSONB (legacy) ---
-    tiers_json = Column(JSONB, nullable=True)
+    # --- Тиры — JSON (legacy) ---
+    tiers_json = Column(JSONColumn, nullable=True)
 
     # --- Повышенный бонус ---
     boost_enabled   = Column(Boolean, default=False, nullable=False)
@@ -61,8 +65,8 @@ class Settings(Base):
     boost_time_from = Column(String(5), nullable=True)
     boost_time_to   = Column(String(5), nullable=True)
     boost_mode      = Column(String(10), default="days", nullable=False)
-    boost_weekdays  = Column(JSONB, nullable=True)   # было Text
-    boost_dates     = Column(JSONB, nullable=True)   # было Text
+    boost_weekdays  = Column(JSONColumn, nullable=True)   # было Text
+    boost_dates     = Column(JSONColumn, nullable=True)   # было Text
 
     # --- ROI ---
     cost_per_lead   = Column(Integer, default=0, nullable=False)

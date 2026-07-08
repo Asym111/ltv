@@ -9,6 +9,7 @@ from sqlalchemy import func, case
 from app.core.database import get_db
 from app.core.security import decrypt_field
 from app.core.roles import TRANSACTION_ROLES
+from app.core.tenant_utils import must_network_id
 from app.models.user import User
 from app.models.transaction import Transaction
 from app.schemas.crm import ClientMetricsOut
@@ -50,10 +51,10 @@ def require_role(request: Request, *allowed: str):
 @router.get("/client/{phone}", response_model=ClientMetricsOut)
 def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_db)) -> ClientMetricsOut:
     require_role(request, *TRANSACTION_ROLES)
-    tenant_id = must_tenant_id(request)
+    network_id = must_network_id(request)  # клиент и его история общие на сеть
     p = normalize_phone(phone)
     p_hash = hashlib.sha256(p.encode()).hexdigest()
-    user = db.query(User).filter(User.tenant_id == tenant_id, User.phone_hash == p_hash).first()
+    user = db.query(User).filter(User.tenant_id == network_id, User.phone_hash == p_hash).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
@@ -68,9 +69,10 @@ def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_d
         func.sum(case((net_paid > 0, 1), else_=0)), 0
     )
 
+    # Покупки клиента по всей сети (кошелёк общий)
     total_spent, purchases_count = (
         db.query(total_spent_expr, purchases_count_expr)
-        .filter(Transaction.user_id == user.id, Transaction.tenant_id == tenant_id)
+        .filter(Transaction.user_id == user.id)
         .first()
     )
 
@@ -82,10 +84,12 @@ def get_client_metrics(phone: str, request: Request, db: Session = Depends(get_d
     balances = get_balances(db, user_id=user.id)
 
     return ClientMetricsOut(
+        id=user.id,
         phone=decrypt_field(user.phone) or user.phone,
         full_name=decrypt_field(user.full_name) if user.full_name else None,
         tier=(user.tier or "Bronze"),
         birth_date=user.birth_date,
+        wa_opt_out=bool(getattr(user, "wa_opt_out", False)),
         total_spent=total_spent,
         purchases_count=purchases_count,
         avg_check=round(float(avg_check), 2),

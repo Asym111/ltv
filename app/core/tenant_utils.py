@@ -7,12 +7,32 @@ from app.models.auth import Tenant
 
 
 def must_tenant_id(request: Request) -> int:
-    """Возвращает tenant_id для текущего пользователя."""
+    """Возвращает tenant_id активного контекста (филиала) пользователя."""
     u = getattr(request.state, "user", None) or {}
     tid = u.get("tenant_id")
     if not tid:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return int(tid)
+
+
+def must_network_id(request: Request) -> int:
+    """
+    Возвращает id корня сети (головного тенанта).
+    Клиенты, бонусы и настройки лояльности общие на сеть и хранятся на корне.
+    """
+    u = getattr(request.state, "user", None) or {}
+    nid = u.get("network_id") or u.get("tenant_id")
+    if not nid:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(nid)
+
+
+def network_tenant_ids(db: Session, network_id: int) -> list[int]:
+    """Все tenant_id сети: корень + филиалы."""
+    ids = [int(network_id)]
+    children = db.query(Tenant.id).filter(Tenant.parent_tenant_id == int(network_id)).all()
+    ids.extend(int(c[0]) for c in children)
+    return ids
 
 
 def get_tenant_ids_for_user(request: Request, db: Session) -> list[int]:

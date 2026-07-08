@@ -81,7 +81,7 @@ def admin_settings(request: Request):
         "admin/settings.html",
         current_page="settings",
         page_title="Настройки",
-        page_subtitle="Правила начисления, списания, активации и дня рождения",
+        page_subtitle="Правила начисления, списания, активации и дня рождения — общие для всей сети филиалов",
     )
 
 
@@ -105,7 +105,7 @@ def admin_whatsapp(request: Request):
         "admin/whatsapp.html",
         current_page="whatsapp",
         page_title="WhatsApp",
-        page_subtitle="Рассылки и сообщения клиентам через GreenAPI",
+        page_subtitle="Центр рассылок и сообщений клиентам",
     )
 
 

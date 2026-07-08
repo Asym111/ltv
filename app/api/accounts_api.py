@@ -272,11 +272,8 @@ def change_password(
     if not uid:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    tenant_id = must_tenant_id(request)
-    u = db.query(AuthUser).filter(
-        AuthUser.id == int(uid),
-        AuthUser.tenant_id == tenant_id,
-    ).first()
+    # По id из сессии: у владельца, переключённого в филиал, active tenant ≠ home tenant
+    u = db.query(AuthUser).filter(AuthUser.id == int(uid)).first()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -288,3 +285,144 @@ def change_password(
     u.password_hash = pw_hash
     db.commit()
     return {"ok": True, "message": "Пароль изменён"}
+
+
+# ── Филиалы (мультифилиальность) ───────────────────────────
+
+class BranchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    is_active: bool
+    created_at: datetime
+
+
+class BranchCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    is_active: Optional[bool] = None
+
+
+class SwitchTenantIn(BaseModel):
+    tenant_id: int
+
+
+def _home_tenant_id(request: Request) -> int:
+    u = getattr(request.state, "user", None) or {}
+    tid = u.get("home_tenant_id") or u.get("tenant_id")
+    if not tid:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(tid)
+
+
+@router.get("/branches")
+def list_branches(request: Request, db: Session = Depends(get_db)):
+    """Список филиалов сети + текущий контекст (для переключателя в шапке)."""
+    must_role(request, "owner", "admin")
+    home_id = _home_tenant_id(request)
+    active_id = must_tenant_id(request)
+
+    home = db.query(Tenant).filter(Tenant.id == home_id).first()
+    if not home:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    is_root = home.parent_tenant_id is None
+    branches: list[Tenant] = []
+    if is_root:
+        branches = (
+            db.query(Tenant)
+            .filter(Tenant.parent_tenant_id == home_id)
+            .order_by(Tenant.id.asc())
+            .all()
+        )
+
+    return {
+        "is_root": is_root,
+        "home_tenant_id": home_id,
+        "home_name": home.name,
+        "active_tenant_id": active_id,
+        "branches": [BranchOut.model_validate(b).model_dump(mode="json") for b in branches],
+    }
+
+
+@router.post("/branches", response_model=BranchOut)
+def create_branch(payload: BranchCreate, request: Request, db: Session = Depends(get_db)):
+    """Создать филиал. Только владелец головного тенанта."""
+    must_role(request, "owner")
+    home_id = _home_tenant_id(request)
+
+    home = db.query(Tenant).filter(Tenant.id == home_id).first()
+    if not home:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    if home.parent_tenant_id is not None:
+        raise HTTPException(status_code=403, detail="Филиал не может создавать филиалы")
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Укажите название филиала")
+
+    branch = Tenant(
+        name=name,
+        parent_tenant_id=home_id,
+        is_active=True,
+        is_setup_completed=True,
+        plan=home.plan or "branch",
+    )
+    db.add(branch)
+    db.commit()
+    db.refresh(branch)
+    return BranchOut.model_validate(branch)
+
+
+@router.patch("/branches/{branch_id}", response_model=BranchOut)
+def update_branch(branch_id: int, payload: BranchUpdate, request: Request, db: Session = Depends(get_db)):
+    must_role(request, "owner")
+    home_id = _home_tenant_id(request)
+
+    branch = db.query(Tenant).filter(
+        Tenant.id == branch_id,
+        Tenant.parent_tenant_id == home_id,
+    ).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Филиал не найден")
+
+    if payload.name is not None:
+        branch.name = payload.name.strip() or branch.name
+    if payload.is_active is not None:
+        branch.is_active = bool(payload.is_active)
+
+    db.commit()
+    db.refresh(branch)
+    return BranchOut.model_validate(branch)
+
+
+@router.post("/switch-tenant")
+def switch_tenant(payload: SwitchTenantIn, request: Request, db: Session = Depends(get_db)):
+    """
+    Переключить активный контекст на филиал (или обратно на головной офис).
+    Доступно owner/admin головного тенанта.
+    """
+    must_role(request, "owner", "admin")
+    home_id = _home_tenant_id(request)
+
+    home = db.query(Tenant).filter(Tenant.id == home_id).first()
+    if not home or home.parent_tenant_id is not None:
+        raise HTTPException(status_code=403, detail="Переключение доступно только из головного офиса")
+
+    target_id = int(payload.tenant_id)
+    if target_id == home_id:
+        target = home
+    else:
+        target = db.query(Tenant).filter(
+            Tenant.id == target_id,
+            Tenant.parent_tenant_id == home_id,
+        ).first()
+        if not target or not target.is_active:
+            raise HTTPException(status_code=404, detail="Филиал не найден или отключён")
+
+    request.session["active_tenant_id"] = target.id
+    request.session["tenant_name"] = target.name
+    return {"ok": True, "active_tenant_id": target.id, "tenant_name": target.name}

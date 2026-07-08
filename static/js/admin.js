@@ -2050,6 +2050,31 @@ function initClientCard() {
       if (mCount) mCount.textContent = fmt0(data.purchases_count);
       if (mAvg) mAvg.textContent = fmtMoney(data.avg_check);
       if (mBonus) mBonus.textContent = fmt0(data.bonus_balance);
+
+      // Тумблер WhatsApp-рассылок (wa_opt_out)
+      const waSwitch = document.getElementById("mWaOptIn");
+      const waHint = document.getElementById("mWaOptHint");
+      if (waSwitch && data.id) {
+        waSwitch.checked = !data.wa_opt_out;
+        if (waHint) waHint.textContent = data.wa_opt_out
+          ? "Отписан — рассылки не приходят"
+          : "Клиент получает рассылки";
+        if (!waSwitch.dataset.bound) {
+          waSwitch.dataset.bound = "1";
+          waSwitch.addEventListener("change", async () => {
+            try {
+              await apiPatch(`/api/users/${data.id}`, { wa_opt_out: !waSwitch.checked });
+              if (waHint) waHint.textContent = waSwitch.checked
+                ? "Клиент получает рассылки"
+                : "Отписан — рассылки не приходят";
+              uiToast(waSwitch.checked ? "Клиент снова получает рассылки" : "Клиент отписан от рассылок", "success");
+            } catch (e) {
+              waSwitch.checked = !waSwitch.checked;
+              uiToast(`Ошибка: ${e.message}`, "error");
+            }
+          });
+        }
+      }
     } catch (e) {
       resetMetrics();
       const msg = String(e.message || "");
@@ -2871,9 +2896,136 @@ function initAccountsPage() {
     }
   });
 
+  // ── Филиалы ───────────────────────────────────────
+  const branchCard = v("accBranchesCard");
+
+  async function loadBranches() {
+    if (!branchCard) return;
+    const tbody = v("accBranchesTbody");
+    const errEl = v("accBranchesErr");
+    if (!tbody) return;
+
+    try {
+      const data = await apiGet("/api/accounts/branches");
+      if (!data.is_root) {
+        branchCard.classList.add("d-none");
+        return;
+      }
+
+      // Статистика по сети (может не быть — не критично)
+      let statsMap = {};
+      try {
+        const rep = await apiGet("/api/reports/super/overview");
+        (rep.branches || []).forEach(b => { statsMap[b.tenant_id] = b; });
+      } catch (_) {}
+
+      const branches = data.branches || [];
+      if (!branches.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-muted">Филиалов пока нет — добавьте первый.</td></tr>`;
+        return;
+      }
+
+      const fmtMoney = n => (Number(n) || 0).toLocaleString("ru-RU");
+      tbody.innerHTML = branches.map(b => {
+        const s = statsMap[b.id] || {};
+        return `
+          <tr>
+            <td class="fw-semibold">📍 ${b.name}</td>
+            <td>${b.is_active
+              ? `<span class="badge text-bg-success">Активен</span>`
+              : `<span class="badge text-bg-danger">Отключён</span>`}</td>
+            <td>${s.users ?? "—"}</td>
+            <td>${s.transactions ?? "—"}</td>
+            <td>${s.revenue != null ? fmtMoney(s.revenue) + " ₸" : "—"}</td>
+            <td class="text-end">
+              <div class="d-flex gap-1 justify-content-end">
+                <button class="btn btn-sm btn-outline-primary" title="Перейти в филиал"
+                        onclick="accGoBranch(${b.id})">
+                  <i class="bi bi-box-arrow-in-right"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" title="Переименовать"
+                        onclick="accRenameBranch(${b.id}, '${(b.name || "").replace(/'/g, "\\'")}')">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-${b.is_active ? "danger" : "success"}"
+                        title="${b.is_active ? "Отключить" : "Включить"}"
+                        onclick="accToggleBranch(${b.id}, ${!b.is_active})">
+                  <i class="bi bi-${b.is_active ? "pause" : "play"}-circle"></i>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join("");
+    } catch (e) {
+      if (errEl) { errEl.textContent = `Ошибка: ${e.message}`; errEl.classList.remove("d-none"); }
+    }
+  }
+
+  window.accGoBranch = async function(branchId) {
+    try {
+      await apiPost("/api/accounts/switch-tenant", { tenant_id: branchId });
+      location.reload();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+    }
+  };
+
+  window.accRenameBranch = async function(branchId, oldName) {
+    const name = prompt("Новое название филиала:", oldName || "");
+    if (!name || !name.trim()) return;
+    try {
+      await apiPatch(`/api/accounts/branches/${branchId}`, { name: name.trim() });
+      uiToast("Филиал переименован", "success");
+      loadBranches();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+    }
+  };
+
+  window.accToggleBranch = async function(branchId, isActive) {
+    if (!isActive && !confirm("Отключить филиал? Его сотрудники потеряют доступ.")) return;
+    try {
+      await apiPatch(`/api/accounts/branches/${branchId}`, { is_active: isActive });
+      uiToast(isActive ? "Филиал включён" : "Филиал отключён", "success");
+      loadBranches();
+    } catch (e) {
+      uiToast(`Ошибка: ${e.message}`, "error");
+    }
+  };
+
+  v("accAddBranchBtn")?.addEventListener("click", () => {
+    v("accBranchCreateBox")?.classList.remove("d-none");
+    v("accBranchName")?.focus();
+  });
+
+  v("accBranchCancelBtn")?.addEventListener("click", () => {
+    v("accBranchCreateBox")?.classList.add("d-none");
+    if (v("accBranchName")) v("accBranchName").value = "";
+  });
+
+  v("accBranchCreateBtn")?.addEventListener("click", async () => {
+    const errEl = v("accBranchCreateErr");
+    const name = (v("accBranchName")?.value || "").trim();
+    if (!name) {
+      if (errEl) { errEl.textContent = "Введите название филиала"; errEl.classList.remove("d-none"); }
+      return;
+    }
+    try {
+      await apiPost("/api/accounts/branches", { name });
+      v("accBranchCreateBox")?.classList.add("d-none");
+      if (v("accBranchName")) v("accBranchName").value = "";
+      if (errEl) errEl.classList.add("d-none");
+      uiToast("Филиал создан", "success");
+      loadBranches();
+    } catch (e) {
+      if (errEl) { errEl.textContent = `✗ ${e.message}`; errEl.classList.remove("d-none"); }
+    }
+  });
+
   // ── Init ──────────────────────────────────────────
   loadProfile();
   loadUsers();
+  loadBranches();
 }
 
 // =========================
@@ -3221,7 +3373,9 @@ function jsrenderAiRecos(recos, containerId) {
 // Добавить в admin.js
 // В DOMContentLoaded: else if (page === "whatsapp") initWhatsappPage();
 // =========================
-function initWhatsappPage() {
+// LEGACY: старая страница WhatsApp. Заменена новым центром рассылок
+// (static/js/whatsapp.js). Функция переименована и больше не вызывается.
+function initWhatsappPageLegacy() {
 
   // ── Helpers ───────────────────────────────────────
   function v(id) { return document.getElementById(id); }
@@ -3445,12 +3599,57 @@ function initWhatsappPage() {
 }
 
 // =========================
+// Branch switcher (мультифилиальность)
+// =========================
+async function initBranchSwitcher() {
+  const wrap = document.getElementById("branchSwitcherWrap");
+  const sel = document.getElementById("branchSwitcher");
+  if (!wrap || !sel) return;
+
+  const role = (document.body.dataset.userRole || "").toLowerCase();
+  if (role !== "owner" && role !== "admin") return;
+
+  let data;
+  try {
+    data = await apiGet("/api/accounts/branches");
+  } catch (e) {
+    return; // нет доступа/не залогинен — просто не показываем
+  }
+  if (!data || !data.is_root) return;
+  const branches = (data.branches || []).filter(b => b.is_active);
+  if (!branches.length) return;
+
+  const opts = [
+    `<option value="${data.home_tenant_id}">🏠 ${data.home_name || "Головной офис"}</option>`,
+    ...branches.map(b => `<option value="${b.id}">📍 ${b.name}</option>`),
+  ];
+  sel.innerHTML = opts.join("");
+  sel.value = String(data.active_tenant_id);
+  wrap.classList.remove("d-none");
+  wrap.classList.add("d-flex");
+
+  sel.addEventListener("change", async () => {
+    const target = parseInt(sel.value, 10);
+    sel.disabled = true;
+    try {
+      await apiPost("/api/accounts/switch-tenant", { tenant_id: target });
+      location.reload();
+    } catch (e) {
+      sel.disabled = false;
+      sel.value = String(data.active_tenant_id);
+      if (typeof uiToast === "function") uiToast(`Не удалось переключить филиал: ${e.message}`, "error");
+    }
+  });
+}
+
+// =========================
 // Entry
 // =========================
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   jsinitMobileSidebar();
   initAiPanelUpgrades();
+  initBranchSwitcher();
 
   // важно: чтобы работали page-* стили (и твой .page-desktop #aiPanelBtn)
   applyBodyPageClass();
@@ -3467,7 +3666,7 @@ document.addEventListener("DOMContentLoaded", () => {
   else if (page === "campaign_detail") initCampaignDetailPage();
   else if (page === "accounts") initAccountsPage();
   else if (page === "videos") initVideosPage();
-  else if (page === "whatsapp") initWhatsappPage();
+  else if (page === "whatsapp" && typeof initWhatsappPage === "function") initWhatsappPage();
 
   initAiOverviewWidget();
   initAiPanel();

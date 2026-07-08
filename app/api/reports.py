@@ -14,7 +14,8 @@ from openpyxl import Workbook
 from app.core.database import get_db
 from app.core.security import decrypt_field
 from app.core.roles import ANALYTICS_ROLES
-from app.core.tenant_utils import get_tenant_ids_for_user
+from app.core.tenant_utils import must_network_id, network_tenant_ids
+from app.models.auth import Tenant
 from app.models.bonus_grant import BonusGrant
 from app.models.user import User
 from app.models.transaction import Transaction
@@ -49,12 +50,19 @@ def expired_bonuses(
 ):
     require_role(request, *ANALYTICS_ROLES)
     tenant_id = must_tenant_id(request)
+    network_id = must_network_id(request)
+
+    # Из головного офиса видно всю сеть, из филиала — только свои начисления
+    if tenant_id == network_id:
+        grant_tids = network_tenant_ids(db, network_id)
+    else:
+        grant_tids = [tenant_id]
 
     q = (
         db.query(BonusGrant, User.phone, User.full_name)
         .join(User, User.id == BonusGrant.user_id)
         .filter(BonusGrant.status == "expired")
-        .filter(BonusGrant.tenant_id == tenant_id)
+        .filter(BonusGrant.tenant_id.in_(grant_tids))
     )
 
     if date_from:
@@ -91,7 +99,7 @@ def birthdays_report(
     db: Session = Depends(get_db),
 ):
     require_role(request, *ANALYTICS_ROLES)
-    tenant_id = must_tenant_id(request)
+    tenant_id = must_network_id(request)  # клиенты общие на сеть
     if not year:
         year = date.today().year
 
@@ -180,28 +188,36 @@ def transactions_excel(
     )
 
 
-# ── Общая аналитика по всем филиалам (super-tenant) ──────────
+# ── Общая аналитика по всем филиалам (сеть) ──────────────────
 @router.get("/super/overview")
 def super_tenant_overview(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_role(request, "owner")
-    tenant_ids = get_tenant_ids_for_user(request, db)
-    if len(tenant_ids) <= 1:
-        raise HTTPException(status_code=400, detail="No branches found. Create child tenants first.")
+    """
+    Сводка по сети: строка на головной офис и каждый филиал.
+    Клиенты общие на сеть, поэтому по филиалам показываем
+    «активных клиентов» = уникальных покупателей филиала.
+    """
+    require_role(request, "owner", "admin")
+    network_id = must_network_id(request)
+    tenant_ids = network_tenant_ids(db, network_id)
+
+    tenants_map = {
+        t.id: t for t in db.query(Tenant).filter(Tenant.id.in_(tenant_ids)).all()
+    }
 
     branches = []
-    total_users = 0
     total_transactions = 0
     total_revenue = 0
     total_bonus_issued = 0
     total_bonus_burned = 0
 
     for tid in tenant_ids:
-        user_count = (
-            db.query(func.count(User.id))
-            .filter(User.tenant_id == tid)
+        # Уникальные покупатели этого филиала (база клиентов общая)
+        buyers = (
+            db.query(func.count(func.distinct(Transaction.user_id)))
+            .filter(Transaction.tenant_id == tid)
             .scalar() or 0
         )
         tx_count = (
@@ -226,25 +242,33 @@ def super_tenant_overview(
             .scalar() or 0
         )
 
+        t = tenants_map.get(tid)
         branches.append({
             "tenant_id": tid,
-            "users": user_count,
+            "name": t.name if t else f"#{tid}",
+            "is_root": bool(t and t.parent_tenant_id is None),
+            "is_active": bool(t and t.is_active),
+            "users": int(buyers),
             "transactions": int(tx_count),
             "revenue": int(revenue),
             "bonus_issued": int(bonus_issued),
             "bonus_burned": int(bonus_burned),
         })
 
-        total_users += user_count
         total_transactions += int(tx_count)
         total_revenue += int(revenue)
         total_bonus_issued += int(bonus_issued)
         total_bonus_burned += int(bonus_burned)
 
+    # Всего клиентов — по общей базе сети (без двойного счёта)
+    total_clients = int(
+        db.query(func.count(User.id)).filter(User.tenant_id == network_id).scalar() or 0
+    )
+
     return {
         "total": {
             "branches": len(branches),
-            "users": total_users,
+            "users": total_clients,
             "transactions": total_transactions,
             "revenue": total_revenue,
             "bonus_issued": total_bonus_issued,
