@@ -313,16 +313,46 @@ def cancel_broadcast(broadcast_id: int, request: Request, db: Session = Depends(
 
 @router.post("/test-send")
 def test_send(payload: TestSendIn, request: Request, db: Session = Depends(get_db)):
-    """Отправить тестовое сообщение (например, себе) с примерными значениями переменных."""
+    """
+    Отправить тестовое сообщение (например, себе).
+    Если номер есть в базе клиентов сети — подставляются его РЕАЛЬНЫЕ
+    имя/баланс/уровень, иначе примерные значения.
+    """
     require_role(request, *BROADCAST_ROLES)
     tenant_id = must_tenant_id(request)
+    network_id = must_network_id(request)
 
-    text = render_message(payload.message_template, {
-        "name": "Айгуль",
-        "bonus": 3000,
-        "tier": "Gold",
-        "phone": normalize_phone(payload.phone),
-    })
+    phone_clean = normalize_phone(payload.phone)
+
+    # Примерные значения по умолчанию
+    variables = {"name": "Айгуль", "bonus": 3000, "tier": "Золото", "phone": phone_clean}
+
+    # Реальные данные, если этот номер — клиент сети
+    try:
+        import hashlib
+        from app.core.security import decrypt_field
+        from app.models.user import User
+        from app.services.loyalty_engine import get_balances
+        from app.services.broadcast_worker import TIER_RU
+
+        p_hash = hashlib.sha256(phone_clean.encode()).hexdigest()
+        u = db.query(User).filter(
+            User.tenant_id == network_id,
+            User.phone_hash == p_hash,
+        ).first()
+        if u:
+            balances = get_balances(db, user_id=u.id)
+            name = (decrypt_field(u.full_name) or "").strip() if u.full_name else ""
+            variables = {
+                "name": name or "Клиент",
+                "bonus": int(balances.get("available") or 0),
+                "tier": TIER_RU.get(u.tier or "", u.tier or ""),
+                "phone": phone_clean,
+            }
+    except Exception:
+        pass
+
+    text = render_message(payload.message_template, variables)
     result = send_message(payload.phone, text, tenant_id=str(tenant_id))
     log_wa_message(
         db,

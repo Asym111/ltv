@@ -97,6 +97,9 @@ RU_ALIASES = {
     "телефон": "phone",
 }
 
+# Уровни в сообщениях клиентам — по-русски
+TIER_RU = {"Bronze": "Бронза", "Silver": "Серебро", "Gold": "Золото"}
+
 
 def render_message(template: str, variables: dict) -> str:
     """
@@ -123,7 +126,7 @@ def render_for_user(db: Session, template: str, msg: WaMessage) -> str:
         try:
             user = db.get(User, int(msg.user_id))
             if user is not None:
-                tier = user.tier or ""
+                tier = TIER_RU.get(user.tier or "", user.tier or "")
                 balances = get_balances(db, user_id=user.id)
                 bonus = int(balances.get("available") or 0)
         except Exception as e:

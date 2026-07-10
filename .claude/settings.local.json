@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile main.py app/core/database.py app/core/migrations.py app/core/config.py app/models/settings_model.py app/models/user.py app/models/bonus_grant.py app/services/loyalty_engine.py app/services/scheduler.py app/api/transactions.py app/api/settings_api.py app/api/ai.py app/web/admin.py)"
     ]
   }
 }
