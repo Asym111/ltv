@@ -281,9 +281,22 @@ def check_tier_downgrade():
         db.close()
 
 
+def check_whatsapp_sessions():
+    """Опрос WhatsApp-сессий всех тенантов для уведомлений суперадмина."""
+    try:
+        from app.services.wa_health import check_all_sessions
+        check_all_sessions()
+    except Exception as e:
+        logger.warning(f"check_whatsapp_sessions failed: {e}")
+
+
 def start_scheduler():
     scheduler.add_job(process_pending_bonuses, 'cron', hour=3, minute=0, id='process_pending')
     scheduler.add_job(send_birthday_greetings, 'cron', hour=4, minute=0, id='birthday')
     scheduler.add_job(send_burn_reminders, 'cron', hour=5, minute=0, id='burn')
     scheduler.add_job(check_tier_downgrade, 'cron', hour=6, minute=0, id='tier_downgrade')
+    # Отключение WhatsApp тормозит рассылки и авто-уведомления, поэтому
+    # проверяем часто, а не раз в сутки, как остальные задачи.
+    scheduler.add_job(check_whatsapp_sessions, 'interval', minutes=10,
+                      id='wa_health', max_instances=1, coalesce=True)
     scheduler.start()

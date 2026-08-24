@@ -20,6 +20,8 @@ from app.core.security import normalize_phone, hash_password
 from app.models.auth import Tenant, AuthUser
 from app.models.user import User
 from app.models.transaction import Transaction
+from app.models.wa_health import WaHealthEvent
+from app.services.wa_health import check_all_sessions, list_alerts, states_by_tenant
 
 router = APIRouter(prefix="/superadmin")
 
@@ -171,11 +173,28 @@ def sa_dashboard(request: Request):
                 **stats,
             })
 
+        # Состояние WhatsApp по тенантам — читаем из базы, её наполняет
+        # фоновая проверка. Опрашивать WA-сервис прямо здесь нельзя:
+        # это N HTTP-запросов с таймаутом на каждый рендер страницы.
+        wa_states = states_by_tenant(db)
+        for r in rows:
+            st = wa_states.get(int(r["tenant"].id))
+            r["wa"] = {
+                "known": st is not None,
+                "connected": bool(st.connected) if st else False,
+                "ever": bool(st.ever_connected) if st else False,
+                "checked_at": st.last_checked_at if st else None,
+                "since": st.last_change_at if st else None,
+            }
+
+        alerts = list_alerts(db)
+
         # Общие цифры
         total_tenants = len(tenants)
         active_tenants = sum(1 for r in rows if r["sub_status"] in ("active", "unlimited"))
         total_users = sum(r["users_count"] for r in rows)
         total_revenue_30d = sum(r["revenue_30d"] for r in rows)
+        wa_down = sum(1 for r in rows if r["wa"]["ever"] and not r["wa"]["connected"])
 
         return templates.TemplateResponse(
             "superadmin/dashboard.html",
@@ -187,6 +206,9 @@ def sa_dashboard(request: Request):
                 "active_tenants": active_tenants,
                 "total_users": total_users,
                 "total_revenue_30d": total_revenue_30d,
+                "wa_alerts": alerts["active"],
+                "wa_recent": alerts["recent"],
+                "wa_down": wa_down,
             },
         )
     finally:
@@ -361,6 +383,57 @@ def sa_videos_page(request: Request):
         })
     finally:
         db.close()
+
+# ── Мониторинг WhatsApp ───────────────────────────────────────
+
+@router.post("/wa/check")
+def sa_wa_check(request: Request):
+    """Опросить WA-сервис прямо сейчас, не дожидаясь фоновой проверки."""
+    redir = _require_auth(request)
+    if redir:
+        return redir
+
+    res = check_all_sessions()
+    if not res.get("ok"):
+        msg = "service_down" if res.get("service_down") else "check_failed"
+        return RedirectResponse(url=f"/superadmin?wa={msg}", status_code=303)
+    return RedirectResponse(url=f"/superadmin?wa=checked&n={res.get('checked', 0)}", status_code=303)
+
+
+@router.post("/wa/events/{event_id}/ack")
+def sa_wa_ack(request: Request, event_id: int):
+    """Отметить уведомление прочитанным (тревога остаётся, пока связь не вернётся)."""
+    redir = _require_auth(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        ev = db.query(WaHealthEvent).filter(WaHealthEvent.id == event_id).first()
+        if ev and ev.acknowledged_at is None:
+            ev.acknowledged_at = datetime.utcnow()
+            db.commit()
+        return RedirectResponse(url="/superadmin", status_code=303)
+    finally:
+        db.close()
+
+
+@router.post("/wa/ack-all")
+def sa_wa_ack_all(request: Request):
+    redir = _require_auth(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        db.query(WaHealthEvent).filter(
+            WaHealthEvent.acknowledged_at.is_(None)
+        ).update({"acknowledged_at": datetime.utcnow()}, synchronize_session=False)
+        db.commit()
+        return RedirectResponse(url="/superadmin", status_code=303)
+    finally:
+        db.close()
+
 
 @router.get("/exit-impersonate")
 def sa_exit_impersonate(request: Request):

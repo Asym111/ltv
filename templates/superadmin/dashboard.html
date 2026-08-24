@@ -174,6 +174,71 @@
       margin-bottom: 1.5rem;
     }
 
+    .ok-banner {
+      background: rgba(16,185,129,.1);
+      border: 1px solid rgba(16,185,129,.25);
+      border-radius: 10px;
+      padding: .75rem 1rem;
+      color: var(--success);
+      font-size: .78rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── WHATSAPP ALERTS ────────────────────── */
+    .wa-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .wa-section-alarm {
+      border-color: rgba(255,68,102,.35);
+      background: linear-gradient(180deg, rgba(255,68,102,.05), transparent 60%), var(--surface);
+    }
+    .wa-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;
+    }
+    .wa-alert {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+      background: rgba(255,68,102,.07);
+      border: 1px solid rgba(255,68,102,.22);
+      border-radius: 10px;
+      padding: .8rem 1rem;
+      margin-bottom: .6rem;
+    }
+    .wa-alert-read { background: var(--surface2); border-color: var(--border2); }
+    .wa-alert-main { display: flex; gap: .75rem; align-items: flex-start; }
+    .wa-alert-main > i { color: var(--danger); font-size: 1.1rem; margin-top: .1rem; }
+    .wa-alert-read .wa-alert-main > i { color: var(--muted); }
+    .wa-alert-name { font-family: 'Syne', sans-serif; font-weight: 600; font-size: .9rem; }
+    .wa-alert-detail { font-size: .76rem; color: var(--text2); }
+    .wa-alert-err { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: .7rem; }
+    .wa-empty { color: var(--text2); font-size: .82rem; display: flex; gap: .5rem; align-items: center; }
+    .wa-empty > i { color: var(--success); }
+
+    .wa-history { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+    .wa-history summary {
+      cursor: pointer; font-size: .75rem; color: var(--muted);
+      letter-spacing: .05em; text-transform: uppercase; font-weight: 600;
+    }
+    .wa-history summary:hover { color: var(--accent); }
+    .wa-history-list { margin-top: .6rem; display: flex; flex-direction: column; gap: .35rem; }
+    .wa-history-row {
+      display: flex; gap: .6rem; align-items: center;
+      font-size: .76rem; color: var(--text2); flex-wrap: wrap;
+    }
+    .wa-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .wa-dot.up { background: var(--success); }
+    .wa-dot.down { background: var(--danger); }
+    .wa-history-time { font-family: 'JetBrains Mono', monospace; color: var(--muted); }
+    .wa-history-name { color: var(--text); font-weight: 500; }
+
+    .wa-cell { display: flex; flex-direction: column; gap: .15rem; }
+    .wa-cell-sub { font-size: .68rem; color: var(--muted); }
+
     /* ── TABLE ──────────────────────────────── */
     .table-section {
       background: var(--surface);
@@ -322,6 +387,114 @@
   </div>
   {% endif %}
 
+  {% if request.query_params.get('wa') == 'checked' %}
+  <div class="ok-banner">
+    <i class="bi bi-check-circle"></i> Проверено сессий: {{ request.query_params.get('n', '0') }}.
+  </div>
+  {% elif request.query_params.get('wa') == 'service_down' %}
+  <div class="error-banner">
+    <i class="bi bi-plug"></i> WA-сервис не отвечает целиком — это проблема платформы,
+    а не отдельной компании. Проверьте ltv-wa-service.
+  </div>
+  {% elif request.query_params.get('wa') == 'check_failed' %}
+  <div class="error-banner">
+    <i class="bi bi-exclamation-triangle"></i> Проверка не выполнена — WA-сервис не настроен
+    (WA_SERVICE_URL / WA_INTERNAL_TOKEN) или упал запрос.
+  </div>
+  {% endif %}
+
+  <!-- ── УВЕДОМЛЕНИЯ: WHATSAPP ─────────────────────── -->
+  <div class="wa-section {% if wa_alerts %}wa-section-alarm{% endif %}">
+    <div class="wa-head">
+      <div class="section-title" style="margin:0">
+        <i class="bi bi-whatsapp"></i> WhatsApp компаний
+        {% if wa_alerts %}
+          <span class="badge badge-expired">отключено: {{ wa_alerts|length }}</span>
+        {% else %}
+          <span class="badge badge-active">все на связи</span>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <form method="post" action="/superadmin/wa/check">
+          <button type="submit" class="btn-sm btn-ghost" title="Опросить WA-сервис сейчас">
+            <i class="bi bi-arrow-repeat"></i> Проверить сейчас
+          </button>
+        </form>
+        {% if wa_alerts %}
+        <form method="post" action="/superadmin/wa/ack-all">
+          <button type="submit" class="btn-sm btn-ghost" title="Отметить все прочитанными">
+            <i class="bi bi-check2-all"></i> Прочитано
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if wa_alerts %}
+      {% for ev in wa_alerts %}
+      <div class="wa-alert {% if ev.acknowledged_at %}wa-alert-read{% endif %}">
+        <div class="wa-alert-main">
+          <i class="bi bi-{% if ev.tenant_id == 0 %}plug{% else %}whatsapp{% endif %}"></i>
+          <div>
+            <div class="wa-alert-name">
+              {{ ev.tenant_name or 'Тенант #' ~ ev.tenant_id }}
+              {% if ev.tenant_id != 0 %}<span class="id-cell">· #{{ ev.tenant_id }}</span>{% endif %}
+            </div>
+            <div class="wa-alert-detail">
+              Отключился {{ ev.created_at.strftime('%d.%m %H:%M') }}
+              {% set mins = ((now - ev.created_at).total_seconds() / 60) | int %}
+              · лежит {% if mins < 60 %}{{ mins }} мин{% elif mins < 1440 %}{{ (mins // 60) }} ч{% else %}{{ (mins // 1440) }} дн{% endif %}
+              {% if ev.detail %}<br><span class="wa-alert-err">{{ ev.detail }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:.4rem;align-items:center">
+          {% if ev.acknowledged_at %}
+            <span class="badge badge-disabled">прочитано</span>
+          {% else %}
+            <form method="post" action="/superadmin/wa/events/{{ ev.id }}/ack">
+              <button type="submit" class="btn-sm btn-ghost" title="Отметить прочитанным">
+                <i class="bi bi-check2"></i>
+              </button>
+            </form>
+          {% endif %}
+          {% if ev.tenant_id != 0 %}
+          <form method="post" action="/superadmin/tenants/{{ ev.tenant_id }}/impersonate">
+            <button type="submit" class="btn-sm btn-accent" title="Войти и переподключить QR">
+              <i class="bi bi-qr-code"></i> Подключить
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="wa-empty">
+        <i class="bi bi-check-circle"></i>
+        Ни одного отключения. Проверка идёт автоматически каждые 10 минут.
+      </div>
+    {% endif %}
+
+    {% if wa_recent %}
+    <details class="wa-history">
+      <summary>История событий ({{ wa_recent|length }})</summary>
+      <div class="wa-history-list">
+        {% for ev in wa_recent %}
+        <div class="wa-history-row">
+          <span class="wa-dot {% if ev.event == 'connected' %}up{% else %}down{% endif %}"></span>
+          <span class="wa-history-time">{{ ev.created_at.strftime('%d.%m %H:%M') }}</span>
+          <span class="wa-history-name">{{ ev.tenant_name or 'Тенант #' ~ ev.tenant_id }}</span>
+          <span class="wa-history-ev">
+            {% if ev.event == 'connected' %}подключился{% else %}отключился{% endif %}
+            {% if ev.resolved_at %}<span class="id-cell">· связь вернулась {{ ev.resolved_at.strftime('%d.%m %H:%M') }}</span>{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+
   <!-- KPI -->
   <div class="kpi-grid">
     <div class="kpi-card">
@@ -338,6 +511,11 @@
       <div class="kpi-label">Клиентов в системе</div>
       <div class="kpi-value">{{ total_users }}</div>
       <div class="kpi-sub">end-users по всем тенантам</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">WhatsApp отключён</div>
+      <div class="kpi-value" style="color:{{ 'var(--danger)' if wa_down else 'var(--success)' }}">{{ wa_down }}</div>
+      <div class="kpi-sub">компаний без связи</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Выручка (30 дн)</div>
@@ -403,6 +581,7 @@
             <th>ID</th>
             <th>Аккаунт</th>
             <th>Статус</th>
+            <th>WhatsApp</th>
             <th>Доступ до</th>
             <th>Клиенты</th>
             <th>Транзакций</th>
@@ -434,6 +613,27 @@
               {% else %}
                 <span class="badge badge-trial">Trial</span>
               {% endif %}
+            </td>
+            <td>
+              <div class="wa-cell">
+                {% if not r.wa.known %}
+                  <span class="badge badge-disabled">нет данных</span>
+                  <span class="wa-cell-sub">проверка ещё не проходила</span>
+                {% elif r.wa.connected %}
+                  <span class="badge badge-active">на связи</span>
+                  {% if r.wa.checked_at %}
+                    <span class="wa-cell-sub">проверен {{ r.wa.checked_at.strftime('%d.%m %H:%M') }}</span>
+                  {% endif %}
+                {% elif r.wa.ever %}
+                  <span class="badge badge-expired">отключён</span>
+                  {% if r.wa.since %}
+                    <span class="wa-cell-sub">с {{ r.wa.since.strftime('%d.%m %H:%M') }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-disabled">не подключали</span>
+                  <span class="wa-cell-sub">QR ни разу не сканировали</span>
+                {% endif %}
+              </div>
             </td>
             <td>
               {% if t.access_until %}
@@ -489,7 +689,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="9" style="text-align:center;padding:2rem;color:var(--muted)">
+            <td colspan="10" style="text-align:center;padding:2rem;color:var(--muted)">
               Нет аккаунтов. Создайте первый выше.
             </td>
           </tr>
