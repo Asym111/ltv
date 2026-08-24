@@ -420,6 +420,41 @@ function initWhatsappPage() {
   // ═══════════════════════════════════════════════════
   // Сводка и запуск
   // ═══════════════════════════════════════════════════
+  // [задержка_мин, задержка_макс, размер_пачки, пауза_между_пачками] — зеркало
+  // SPEED_PRESETS из app/api/broadcasts.py. Расходиться им нельзя.
+  const SPEED_CFG = {
+    safe:   [7, 14, 25, 90],
+    slow:   [12, 20, 20, 120],
+    fast:   [4, 8, 30, 60],
+    turtle: [60, 120, 8, 900],
+  };
+
+  const SEND_WINDOW_SEC = 12 * 3600;   // окно отправки 09:00–21:00
+
+  function speedCfg() {
+    return SPEED_CFG[$("bcSpeed")?.value || "safe"] || SPEED_CFG.safe;
+  }
+
+  // Средние секунды на сообщение с учётом пауз между пачками
+  function perMsgSeconds() {
+    const c = speedCfg();
+    return (c[0] + c[1]) / 2 + c[3] / c[2];
+  }
+
+  // Сколько сообщений реально уходит за сутки: упирается либо в дневной
+  // лимит, либо в физическую пропускную способность окна 09:00–21:00.
+  // При «Черепахе» потолок окна (~213) ниже любого разумного daily_cap,
+  // поэтому считать по одному daily_cap было бы враньём.
+  function dailyThroughput() {
+    const cap = parseInt($("bcDailyCap")?.value || "250", 10) || 250;
+    const windowCap = Math.max(1, Math.floor(SEND_WINDOW_SEC / perMsgSeconds()));
+    return Math.min(cap, windowCap);
+  }
+
+  function sendDaysFor(count) {
+    return Math.max(1, Math.ceil(count / dailyThroughput()));
+  }
+
   function fmtEta(sec) {
     if (!sec || sec <= 0) return "";
     const m = Math.round(sec / 60);
@@ -429,10 +464,14 @@ function initWhatsappPage() {
   }
 
   function estimateEtaSec(count) {
-    const speed = $("bcSpeed")?.value || "safe";
-    const cfg = { safe: [7, 14, 25, 90], slow: [12, 20, 20, 120], fast: [4, 8, 30, 60] }[speed];
-    const avg = (cfg[0] + cfg[1]) / 2 + cfg[3] / cfg[2];
-    return Math.round(count * avg);
+    return Math.round(count * perMsgSeconds());
+  }
+
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b > 1 && b < 5) return few;
+    return b === 1 ? one : many;
   }
 
   function renderSummary() {
@@ -441,15 +480,29 @@ function initWhatsappPage() {
     const count = lastEstimate?.count || 0;
     const msg = ($("bcMessage")?.value || "").trim();
     if (!count || !msg) { box.classList.add("d-none"); return; }
-    const eta = estimateEtaSec(count);
-    const finish = new Date(Date.now() + eta * 1000);
+
+    const cfg = speedCfg();
+    const perDay = dailyThroughput();
+    const days = sendDaysFor(count);
+
+    // Через ночную паузу «закончится к 14:30» стало бы враньём,
+    // поэтому для многодневной отправки показываем дни, а не время.
+    const timing = days <= 1
+      ? `<i class="bi bi-clock me-1"></i>Займёт ${fmtEta(estimateEtaSec(count))} — закончится к
+         <b>${new Date(Date.now() + estimateEtaSec(count) * 1000)
+              .toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+         (если в окне 09:00–21:00)`
+      : `<i class="bi bi-calendar-range me-1"></i>Займёт <b>${days} ${plural(days, "день", "дня", "дней")}</b>
+         — примерно по ${perDay} ${plural(perDay, "сообщению", "сообщения", "сообщений")} в сутки
+         в окне 09:00–21:00`;
+
     box.classList.remove("d-none");
     box.innerHTML = `
       <div><i class="bi bi-people me-1"></i>Получателей: <b>${count}</b></div>
-      <div><i class="bi bi-clock me-1"></i>Займёт ${fmtEta(eta)} — закончится к
-        <b>${finish.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
-        (если в окне 09:00–21:00)</div>
-      <div class="text-muted small mt-1">Задержки случайные, каждые ~25 сообщений — длинная пауза.</div>
+      <div>${timing}</div>
+      <div class="text-muted small mt-1">Задержки случайные ${cfg[0]}–${cfg[1]} сек,
+        каждые ${cfg[2]} ${plural(cfg[2], "сообщение", "сообщения", "сообщений")} —
+        пауза ${Math.round(cfg[3] / 60)} мин.</div>
       ${renderBonusLine()}
     `;
   }
@@ -611,16 +664,16 @@ function initWhatsappPage() {
   bindPreset("bbTtlSel", "bbTtl");
 
   // Срок жизни бонуса должен переживать саму отправку: последние в очереди
-  // получают сообщение через count/daily_cap дней после начисления.
+  // получают сообщение через sendDays дней после начисления. Скорость влияет
+  // напрямую — «Черепаха» растягивает волну 2 с недели до восьми дней.
   function bbUpdateTtlHint() {
     const hint = $("bbTtlHint");
     if (!hint) return;
     const count = lastEstimate?.count || 0;
-    const cap = parseInt($("bcDailyCap")?.value || "250", 10) || 250;
     const ttl = parseInt($("bbTtl")?.value || "0", 10) || 0;
     if (!count || !ttl) { hint.textContent = ""; return; }
 
-    const sendDays = Math.ceil(count / cap);
+    const sendDays = sendDaysFor(count);
     if (sendDays <= 1) {
       hint.innerHTML = `<i class="bi bi-check2 me-1"></i>Рассылка уйдёт за день — весь срок достанется клиенту целиком.`;
       hint.className = "text-muted small";
@@ -639,6 +692,7 @@ function initWhatsappPage() {
     }
   }
   $("bcDailyCap")?.addEventListener("input", bbUpdateTtlHint);
+  $("bcSpeed")?.addEventListener("change", bbUpdateTtlHint);
 
   // Любое изменение аудитории или параметров бонуса сбрасывает проверку
   ["bcMinBonus", "bcInactiveDays", "bcInactiveDaysMax", "bcTier", "bcSegment",

@@ -36,9 +36,14 @@ BROADCAST_ROLES = ("owner", "admin")
 
 # Пресеты скорости отправки
 SPEED_PRESETS = {
-    "safe":     {"delay_min_sec": 7,  "delay_max_sec": 14, "batch_size": 25, "batch_pause_sec": 90},
-    "slow":     {"delay_min_sec": 12, "delay_max_sec": 20, "batch_size": 20, "batch_pause_sec": 120},
-    "fast":     {"delay_min_sec": 4,  "delay_max_sec": 8,  "batch_size": 30, "batch_pause_sec": 60},
+    "safe":     {"delay_min_sec": 7,  "delay_max_sec": 14,  "batch_size": 25, "batch_pause_sec": 90},
+    "slow":     {"delay_min_sec": 12, "delay_max_sec": 20,  "batch_size": 20, "batch_pause_sec": 120},
+    "fast":     {"delay_min_sec": 4,  "delay_max_sec": 8,   "batch_size": 30, "batch_pause_sec": 60},
+    # Для номера, который WhatsApp отключает после ~10 сообщений.
+    # Пауза между сообщениями 60–120 сек, каждые 8 сообщений — отдых ~15 мин.
+    # Задержка в воркере и так random.uniform(min, max), поэтому разброс
+    # получается неровным сам собой — повторяющийся узор выдавал бы бота.
+    "turtle":   {"delay_min_sec": 60, "delay_max_sec": 120, "batch_size": 8,  "batch_pause_sec": 900},
 }
 
 
