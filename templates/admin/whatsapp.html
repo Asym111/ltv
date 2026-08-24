@@ -25,6 +25,11 @@
     </button>
   </li>
   <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#waTabBonus" type="button" id="waBonusTabBtn">
+      <i class="bi bi-gift me-1"></i> Акции
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="pill" data-bs-target="#waTabTemplates" type="button" id="waTemplatesTabBtn">
       <i class="bi bi-chat-square-text me-1"></i> Шаблоны
     </button>
@@ -64,9 +69,19 @@
 
             <label class="wa-aud-card">
               <input type="radio" name="bcAudience" value="inactive_days">
-              <span><i class="bi bi-moon me-1"></i><b>Давно не были</b>
-                <small class="d-block text-muted">не покупали
-                  <input type="number" id="bcInactiveDays" value="30" min="1" class="wa-inline-num"> дней и больше</small>
+              <span class="flex-grow-1"><i class="bi bi-moon me-1"></i><b>Давно не были</b>
+                <small class="d-block text-muted">не покупали от
+                  <input type="number" id="bcInactiveDays" value="30" min="1" class="wa-inline-num"> до
+                  <input type="number" id="bcInactiveDaysMax" placeholder="∞" min="2" class="wa-inline-num"> дней
+                </small>
+                <small class="d-block text-muted mt-1">
+                  Верхнюю границу можно не заполнять — тогда возьмём всех, кто молчит дольше нижней.
+                </small>
+                <span class="d-flex gap-1 flex-wrap mt-1">
+                  <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-wave="122,183">4–6 мес</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-wave="183,365">6–12 мес</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-wave="365,">больше года</button>
+                </span>
               </span>
             </label>
 
@@ -144,12 +159,90 @@
             </button>
           </div>
         </div>
+
+        <!-- Шаг 2: Бонусы этой же аудитории -->
+        <div class="card p-3 mt-3">
+          <div class="h6 mb-1">
+            <span class="badge text-bg-dark me-1">2</span> Начислить бонусы
+            <span class="badge text-bg-light text-dark fw-normal ms-1">необязательно</span>
+          </div>
+          <div class="text-muted small mb-2">
+            Бонусы получат ровно те клиенты, что выбраны в шаге 1 — списки совпадают один в один.
+          </div>
+
+          <label class="wa-aud-card mb-2">
+            <input type="checkbox" id="bbEnabled">
+            <span><i class="bi bi-gift me-1"></i><b>Начислить бонусы этой аудитории</b>
+              <small class="d-block text-muted">чтобы в сообщении было о чём написать</small>
+            </span>
+          </label>
+
+          <div id="bbBox" class="d-none">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="settings-label">Бонусов каждому</label>
+                <select id="bbAmountSel" class="settings-select mt-1">
+                  <option value="5000">5 000 ₸</option>
+                  <option value="10000">10 000 ₸</option>
+                  <option value="15000">15 000 ₸</option>
+                  <option value="20000">20 000 ₸</option>
+                  <option value="30000" selected>30 000 ₸</option>
+                  <option value="50000">50 000 ₸</option>
+                  <option value="custom">Своя сумма…</option>
+                </select>
+                <input type="number" id="bbAmount" class="settings-input mt-1 d-none"
+                       value="30000" min="1" max="1000000" placeholder="сумма бонуса">
+              </div>
+              <div class="col-6">
+                <label class="settings-label">Сгорят через</label>
+                <select id="bbTtlSel" class="settings-select mt-1">
+                  <option value="14">14 дней</option>
+                  <option value="30">30 дней</option>
+                  <option value="45" selected>45 дней</option>
+                  <option value="60">60 дней</option>
+                  <option value="90">90 дней</option>
+                  <option value="custom">Свой срок…</option>
+                </select>
+                <input type="number" id="bbTtl" class="settings-input mt-1 d-none"
+                       value="45" min="1" max="365" placeholder="дней">
+              </div>
+              <div class="col-12">
+                <div class="text-muted small" id="bbTtlHint"></div>
+              </div>
+              <div class="col-12">
+                <label class="settings-label">Метка акции</label>
+                <input type="text" id="bbTag" class="settings-input mt-1" placeholder="reactivation-w1" maxlength="40">
+                <div class="text-muted small mt-1">
+                  Метка защищает от двойного начисления: повторный запуск с той же меткой
+                  пропустит тех, кому уже начислено. По ней же смотрится отчёт во вкладке «Акции».
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-outline-primary flex-grow-1" type="button" id="bbDryBtn">
+                <i class="bi bi-calculator me-1"></i>Проверить
+              </button>
+              <button class="btn btn-success flex-grow-1" type="button" id="bbGrantBtn" disabled>
+                <i class="bi bi-gift me-1"></i>Начислить
+              </button>
+            </div>
+
+            <div id="bbResult" class="wa-summary mt-2 d-none"></div>
+            <div id="bbErr" class="text-danger small d-none mt-2"></div>
+            <div class="text-muted small mt-2">
+              <i class="bi bi-shield-check me-1"></i>
+              Сначала «Проверить» — покажет, скольким начислим и на какую сумму, ничего не записывая.
+              Кнопка «Начислить» откроется только после проверки.
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Шаг 2: Сообщение -->
+      <!-- Шаг 3: Сообщение -->
       <div class="col-12 col-xl-7">
         <div class="card p-3 mb-3">
-          <div class="h6 mb-1"><span class="badge text-bg-dark me-1">2</span> Текст сообщения</div>
+          <div class="h6 mb-1"><span class="badge text-bg-dark me-1">3</span> Текст сообщения</div>
           <div class="text-muted small mb-2">Нажмите на переменную, чтобы вставить её в текст</div>
 
           <div class="d-flex gap-2 mb-2 flex-wrap">
@@ -192,9 +285,9 @@
           </div>
         </div>
 
-        <!-- Шаг 3: Запуск -->
+        <!-- Шаг 4: Запуск -->
         <div class="card p-3">
-          <div class="h6 mb-2"><span class="badge text-bg-dark me-1">3</span> Проверка и запуск</div>
+          <div class="h6 mb-2"><span class="badge text-bg-dark me-1">4</span> Проверка и запуск</div>
 
           <div class="row g-2 align-items-end mb-2">
             <div class="col-12 col-md-5">
@@ -237,6 +330,25 @@
         </button>
       </div>
       <div id="waHistoryList" class="d-flex flex-column gap-2">
+        <div class="text-muted small">Загрузка…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ ВКЛАДКА: АКЦИИ (массовые начисления) ════════════ -->
+  <div class="tab-pane fade" id="waTabBonus">
+    <div class="card p-3">
+      <div class="d-flex align-items-center justify-content-between mb-1 flex-wrap gap-2">
+        <div class="h6 mb-0">Отдача от акций с бонусами</div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="bbReportRefresh">
+          <i class="bi bi-arrow-repeat"></i>
+        </button>
+      </div>
+      <div class="text-muted small mb-3">
+        Главная цифра — <b>дошли до покупки</b>: доля клиентов, которые реально потратили
+        начисленный бонус. По ней решают, запускать ли следующую волну и на какую сумму.
+      </div>
+      <div id="bbReportList" class="d-flex flex-column gap-2">
         <div class="text-muted small">Загрузка…</div>
       </div>
     </div>
@@ -332,8 +444,11 @@
   .wa-aud-card { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border, #e3e8ef);
     border-radius:10px; padding:10px 12px; cursor:pointer; margin:0; transition:border-color .15s, background .15s; }
   .wa-aud-card:hover { border-color: var(--mint, #26c485); }
-  .wa-aud-card input[type=radio] { margin-top:4px; accent-color: var(--mint, #26c485); }
+  .wa-aud-card input[type=radio], .wa-aud-card input[type=checkbox] { margin-top:4px; accent-color: var(--mint, #26c485); }
   .wa-aud-card:has(input:checked) { border-color: var(--mint, #26c485); background: rgba(38,196,133,.06); }
+  .bb-metric { border:1px solid var(--border,#e3e8ef); border-radius:10px; padding:8px 10px; text-align:center; }
+  .bb-metric b { display:block; font-size:1.15rem; line-height:1.2; }
+  .bb-metric small { color:#6c757d; font-size:.72rem; }
   .wa-inline-num { width:70px; border:1px solid var(--border,#e3e8ef); border-radius:6px; padding:1px 6px; }
   .wa-inline-select { border:1px solid var(--border,#e3e8ef); border-radius:6px; padding:2px 6px; max-width:200px; }
   .wa-manual-list { max-height:260px; overflow-y:auto; border:1px solid var(--border,#e3e8ef); border-radius:8px; padding:6px; }

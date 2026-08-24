@@ -7,7 +7,7 @@ API центра WhatsApp-рассылок.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.tenant_utils import must_tenant_id, must_network_id, network_tenant_ids, require_role
 from app.models.broadcast import Broadcast, WaMessage
+from app.models.bonus_grant import BonusGrant
+from app.models.user import User
 from app.services.broadcast_audience import build_audience, estimate_audience, AUDIENCE_KINDS
+from app.services.loyalty_engine import get_balances, _now as loyalty_now
 from app.services.broadcast_worker import (
     render_message,
     start_broadcast_worker,
@@ -219,14 +222,17 @@ def start_broadcast_core(db: Session, b: Broadcast) -> Dict[str, Any]:
         )
 
     tenant_ids = network_tenant_ids(db, b.network_id)
-    res = build_audience(
-        db,
-        network_id=b.network_id,
-        tenant_ids=tenant_ids,
-        kind=b.audience_kind,
-        params=b.audience_json or {},
-        exclude_recent_days=int(b.exclude_recent_days or 0),
-    )
+    try:
+        res = build_audience(
+            db,
+            network_id=b.network_id,
+            tenant_ids=tenant_ids,
+            kind=b.audience_kind,
+            params=b.audience_json or {},
+            exclude_recent_days=int(b.exclude_recent_days or 0),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     recipients = res["recipients"]
     if not recipients:
         raise HTTPException(status_code=400, detail="В аудитории нет получателей — рассылку не запускаем.")
@@ -396,6 +402,224 @@ def list_broadcasts(
         "total": total,
         "items": [_broadcast_out(b, {"sender_name": names.get(b.tenant_id, "")}) for b in rows],
     }
+
+
+# ── Массовое начисление бонусов сегменту ─────────────────────
+# ВАЖНО: объявлено ДО @router.get("/{broadcast_id}"), иначе путь
+# /bulk-bonus уйдёт в него и упадёт на приведении "bulk-bonus" к int.
+
+class BulkBonusIn(AudienceIn):
+    """Начисление бонусов той же аудитории, что и рассылка."""
+    amount: int = Field(..., ge=1, le=1_000_000)          # бонусов каждому клиенту
+    ttl_days: int = Field(default=30, ge=1, le=365)       # срок жизни бонуса
+    tag: str = Field(..., min_length=2, max_length=40)    # метка акции: "reactivation-w1"
+    dry_run: bool = Field(default=True)                   # True = только посчитать
+
+
+def _bulk_source(tag: str) -> str:
+    return f"bulk:{(tag or '').strip()}"
+
+
+@router.post("/bulk-bonus")
+def bulk_grant_bonus(payload: BulkBonusIn, request: Request, db: Session = Depends(get_db)):
+    """
+    Разово начисляет бонус всем клиентам сегмента по всей сети (корень + филиалы).
+
+    Идемпотентность: source = "bulk:<tag>". Повторный вызов с тем же tag
+    пропустит тех, кому уже начислено — двойного начисления не будет.
+
+    Побочный эффект (полезный): для каждого получателя пересчитывается
+    User.bonus_balance через get_balances — сгоревшие гранты помечаются
+    expired, фиктивный кэш в карточке клиента исправляется на реальный.
+    """
+    require_role(request, *BROADCAST_ROLES)
+    network_id = must_network_id(request)
+    tenant_ids = network_tenant_ids(db, network_id)
+
+    if payload.audience_kind not in AUDIENCE_KINDS:
+        raise HTTPException(status_code=400, detail=f"Неизвестный тип аудитории: {payload.audience_kind}")
+
+    # Та же функция, что собирает аудиторию рассылки — списки совпадут 1 в 1.
+    try:
+        audience = build_audience(
+            db,
+            network_id=network_id,
+            tenant_ids=tenant_ids,
+            kind=payload.audience_kind,
+            params=payload.audience_params,
+            exclude_recent_days=int(payload.exclude_recent_days or 0),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    recipients = audience["recipients"]
+    user_ids = [int(r["user_id"]) for r in recipients]
+    source = _bulk_source(payload.tag)
+
+    # Кому по этой акции уже начисляли
+    already: set[int] = set()
+    if user_ids:
+        rows = (
+            db.query(BonusGrant.user_id)
+            .filter(BonusGrant.user_id.in_(user_ids), BonusGrant.source == source)
+            .distinct()
+            .all()
+        )
+        already = {int(r[0]) for r in rows}
+
+    to_grant = [uid for uid in user_ids if uid not in already]
+
+    result: Dict[str, Any] = {
+        "source": source,
+        "tag": payload.tag.strip(),
+        "audience_kind": payload.audience_kind,
+        "audience_params": payload.audience_params,
+        "branches_covered": tenant_ids,
+        "audience_total": len(recipients),
+        "excluded": audience["excluded"],
+        "already_granted": len(already),
+        "to_grant": len(to_grant),
+        "amount_per_client": int(payload.amount),
+        "ttl_days": int(payload.ttl_days),
+        "total_bonus_amount": len(to_grant) * int(payload.amount),
+        "dry_run": bool(payload.dry_run),
+        "sample": [
+            {"name": r["name"], "phone": "***" + r["phone"][-4:], "tier": r["tier"], "bonus_now": r["bonus"]}
+            for r in recipients[:10]
+        ],
+    }
+
+    if payload.dry_run:
+        result["granted"] = 0
+        result["note"] = "Ничего не записано. Повтори с dry_run=false, чтобы начислить."
+        return result
+
+    if not to_grant:
+        result["granted"] = 0
+        result["note"] = "Все клиенты сегмента уже получили бонус по этой акции."
+        return result
+
+    # Часы бонусной механики — Алматы (UTC+5), как в loyalty_engine.
+    # Берём его же, иначе expires_at разъедется с проверкой сгорания на 5 часов.
+    now = loyalty_now()
+    expires_at = now + timedelta(days=int(payload.ttl_days))
+
+    granted = 0
+    balance_fixed = 0      # у скольких кэш в карточке врал ДО начисления
+    balance_delta = 0      # на сколько бонусов суммарно врал (обычно в плюс)
+    errors: List[str] = []
+
+    # Пачками по 200 — чтобы длинная транзакция не держала базу
+    for i in range(0, len(to_grant), 200):
+        chunk = to_grant[i:i + 200]
+        try:
+            for uid in chunk:
+                db.add(BonusGrant(
+                    user_id=uid,
+                    tenant_id=network_id,       # кошелёк общий на сеть
+                    transaction_id=None,
+                    amount=int(payload.amount),
+                    remaining=int(payload.amount),
+                    status="available",         # доступен сразу, без activation_days
+                    available_from=now,
+                    expires_at=expires_at,
+                    source=source,
+                ))
+            db.commit()
+            granted += len(chunk)
+
+            # Пересчёт кэша баланса в карточке клиента.
+            # get_balances попутно гасит сгоревшие гранты (process_bonus_lifecycle).
+            for uid in chunk:
+                u = db.get(User, uid)
+                if not u:
+                    continue
+                old = int(u.bonus_balance or 0)
+                new = int(get_balances(db, user_id=uid)["total"])
+                # new уже включает свежий грант. Кэш врал, только если старое
+                # значение расходится с реальным балансом БЕЗ этого начисления —
+                # иначе мы бы считали фиктивным обычный рост у всех подряд.
+                was = new - int(payload.amount)
+                if old != was:
+                    balance_fixed += 1
+                    balance_delta += old - was
+                u.bonus_balance = new
+            db.commit()
+
+        except Exception as e:  # noqa: BLE001
+            db.rollback()
+            errors.append(f"batch {i}: {e}")
+
+    result["granted"] = granted
+    result["balance_cache_fixed"] = balance_fixed
+    result["balance_cache_delta"] = balance_delta
+    result["expires_at"] = expires_at.isoformat()
+    if errors:
+        result["errors"] = errors
+    return result
+
+
+def _bulk_report_rows(db: Session, network_id: int, source: str) -> List[BonusGrant]:
+    return (
+        db.query(BonusGrant)
+        .join(User, User.id == BonusGrant.user_id)
+        .filter(BonusGrant.source == source, User.tenant_id == network_id)
+        .all()
+    )
+
+
+def _bulk_stats(source: str, rows: List[BonusGrant]) -> Dict[str, Any]:
+    issued = sum(int(g.amount or 0) for g in rows)
+    left = sum(int(g.remaining or 0) for g in rows)
+    used_clients = sum(1 for g in rows if int(g.remaining or 0) < int(g.amount or 0))
+    created = [g.created_at for g in rows if g.created_at]
+    expires = [g.expires_at for g in rows if g.expires_at]
+    return {
+        "source": source,
+        "tag": source[len("bulk:"):] if source.startswith("bulk:") else source,
+        "clients": len(rows),
+        "issued": issued,
+        "remaining": left,
+        "used": issued - left,
+        "used_percent": round((issued - left) / issued * 100, 1) if issued else 0.0,
+        "clients_activated": used_clients,
+        "activation_percent": round(used_clients / len(rows) * 100, 1) if rows else 0.0,
+        "expired": sum(1 for g in rows if g.status == "expired"),
+        "amount_per_client": int(rows[0].amount or 0) if rows else 0,
+        "granted_at": min(created).isoformat() if created else None,
+        "expires_at": max(expires).isoformat() if expires else None,
+    }
+
+
+@router.get("/bulk-bonus")
+def bulk_bonus_list(request: Request, db: Session = Depends(get_db)):
+    """Список акций массового начисления сети — для выпадающего списка в отчёте."""
+    require_role(request, *BROADCAST_ROLES)
+    network_id = must_network_id(request)
+
+    rows = (
+        db.query(BonusGrant)
+        .join(User, User.id == BonusGrant.user_id)
+        .filter(BonusGrant.source.like("bulk:%"), User.tenant_id == network_id)
+        .all()
+    )
+    by_source: Dict[str, List[BonusGrant]] = {}
+    for g in rows:
+        by_source.setdefault(g.source, []).append(g)
+
+    items = [_bulk_stats(src, grants) for src, grants in by_source.items()]
+    items.sort(key=lambda it: it["granted_at"] or "", reverse=True)
+    return {"items": items}
+
+
+@router.get("/bulk-bonus/{tag}")
+def bulk_bonus_report(tag: str, request: Request, db: Session = Depends(get_db)):
+    """Отчёт по акции: начислено / потрачено / сгорело."""
+    require_role(request, *BROADCAST_ROLES)
+    network_id = must_network_id(request)
+
+    source = _bulk_source(tag)
+    return _bulk_stats(source, _bulk_report_rows(db, network_id, source))
 
 
 @router.get("/{broadcast_id}")

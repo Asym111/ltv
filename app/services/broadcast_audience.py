@@ -113,8 +113,19 @@ def build_audience(
         selected_ids = [uid for uid, total in bonus_map.items() if total >= min_bonus]
 
     elif kind == "inactive_days":
+        # days     — нижняя граница: не покупал МИНИМУМ столько дней
+        # days_max — верхняя граница (необязательно): покупал НЕ РАНЬШЕ чем столько дней назад
+        # Волна «4-6 месяцев»: {"days": 122, "days_max": 183}
         days = max(1, int(params.get("days") or 30))
-        cutoff = _now() - timedelta(days=days)
+        days_max_raw = params.get("days_max")
+        days_max = int(days_max_raw) if days_max_raw not in (None, "", 0) else None
+        if days_max is not None and days_max <= days:
+            raise ValueError("days_max должен быть больше days")
+
+        now = _now()
+        cutoff = now - timedelta(days=days)
+        cutoff_max = now - timedelta(days=days_max) if days_max else None
+
         rows = (
             db.query(Transaction.user_id, func.max(Transaction.created_at))
             .filter(Transaction.tenant_id.in_(tenant_ids))
@@ -122,14 +133,22 @@ def build_audience(
             .all()
         )
         last_map = {int(uid): last for uid, last in rows}
-        include_never = bool(params.get("include_never", True))
+
+        # Никогда не покупавших нельзя отнести к волне по давности —
+        # при заданном days_max они исключаются автоматически.
+        include_never = bool(params.get("include_never", True)) and days_max is None
+
         for uid in users_by_id:
             last = last_map.get(uid)
             if last is None:
                 if include_never:
                     selected_ids.append(uid)
-            elif last < cutoff:
-                selected_ids.append(uid)
+                continue
+            if last >= cutoff:
+                continue                      # покупал недавно — не наш
+            if cutoff_max is not None and last < cutoff_max:
+                continue                      # покупал слишком давно — другая волна
+            selected_ids.append(uid)
 
     elif kind == "tier":
         tier = str(params.get("tier") or "Gold").strip()

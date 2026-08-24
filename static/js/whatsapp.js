@@ -124,7 +124,11 @@ function initWhatsappPage() {
     const kind = audienceKind();
     const params = {};
     if (kind === "bonus_gt_zero") params.min_bonus = parseInt($("bcMinBonus")?.value || "1", 10) || 1;
-    if (kind === "inactive_days") params.days = parseInt($("bcInactiveDays")?.value || "30", 10) || 30;
+    if (kind === "inactive_days") {
+      params.days = parseInt($("bcInactiveDays")?.value || "30", 10) || 30;
+      const dmax = parseInt($("bcInactiveDaysMax")?.value || "", 10);
+      if (dmax > 0) params.days_max = dmax;
+    }
     if (kind === "tier") params.tier = $("bcTier")?.value || "Gold";
     if (kind === "segment") params.segment = $("bcSegment")?.value || "risk";
     if (kind === "campaign") params.campaign_id = parseInt($("bcCampaign")?.value || "0", 10) || 0;
@@ -162,6 +166,7 @@ function initWhatsappPage() {
       renderWarnings(lastEstimate.warnings || []);
       renderPreview();
       renderSummary();
+      bbUpdateTtlHint();
     } catch (e) {
       $("bcCount").textContent = "—";
       $("bcExcludedInfo").textContent = e.message;
@@ -176,9 +181,22 @@ function initWhatsappPage() {
       scheduleCount();
     });
   });
-  ["bcMinBonus", "bcInactiveDays", "bcTier", "bcSegment", "bcCampaign", "bcExcludeDays"].forEach(id => {
+  ["bcMinBonus", "bcInactiveDays", "bcInactiveDaysMax", "bcTier", "bcSegment", "bcCampaign", "bcExcludeDays"].forEach(id => {
     $(id)?.addEventListener("change", scheduleCount);
     $(id)?.addEventListener("input", scheduleCount);
+  });
+
+  // Пресеты волн для «Давно не были»: заполняют обе границы разом
+  document.querySelectorAll("[data-wave]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const [from, to] = btn.dataset.wave.split(",");
+      if ($("bcInactiveDays")) $("bcInactiveDays").value = from;
+      if ($("bcInactiveDaysMax")) $("bcInactiveDaysMax").value = to || "";
+      const radio = document.querySelector('input[name="bcAudience"][value="inactive_days"]');
+      if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event("change")); }
+      else scheduleCount();
+    });
   });
 
   // ── Ручной выбор клиентов ──────────────────────────
@@ -432,7 +450,22 @@ function initWhatsappPage() {
         <b>${finish.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
         (если в окне 09:00–21:00)</div>
       <div class="text-muted small mt-1">Задержки случайные, каждые ~25 сообщений — длинная пауза.</div>
+      ${renderBonusLine()}
     `;
+  }
+
+  // Строка о бонусах в сводке запуска: рассылка про бонусы, отправленная
+  // до самого начисления, придёт клиентам с пустым балансом.
+  function renderBonusLine() {
+    if (!$("bbEnabled")?.checked) return "";
+    if (bbGranted) {
+      return `<div class="text-success small mt-1"><i class="bi bi-check-circle me-1"></i>
+        Бонусы начислены: ${fmtNum(bbGranted.granted)} клиентам по ${fmtNum(bbGranted.amount)} ₸,
+        сгорят через ${bbGranted.ttl_days} дней (метка «${bbGranted.tag}»)</div>`;
+    }
+    return `<div class="text-warning small mt-1"><i class="bi bi-exclamation-triangle me-1"></i>
+      Бонусы ещё не начислены — сделайте это в шаге 2, иначе клиенты получат
+      сообщение о бонусах с пустым балансом.</div>`;
   }
   $("bcSpeed")?.addEventListener("change", renderSummary);
 
@@ -479,6 +512,262 @@ function initWhatsappPage() {
       btn.innerHTML = '<i class="bi bi-whatsapp me-1"></i> Запустить рассылку';
     }
   });
+
+  // ═══════════════════════════════════════════════════
+  // Массовое начисление бонусов аудитории
+  // ═══════════════════════════════════════════════════
+  let bbCheckedPayload = null;   // payload последней успешной проверки
+  let bbGranted = null;          // {tag, amount, ttl_days, granted} после реального начисления
+
+  const fmtNum = (n) => Number(n || 0).toLocaleString("ru-RU");
+
+  function bbCollect(dryRun) {
+    return {
+      ...collectAudience(),
+      amount: parseInt($("bbAmount")?.value || "0", 10) || 0,
+      ttl_days: parseInt($("bbTtl")?.value || "30", 10) || 30,
+      tag: ($("bbTag")?.value || "").trim(),
+      dry_run: !!dryRun,
+    };
+  }
+
+  // Аудитория без учёта dry_run — по ней сверяем, не изменились ли настройки
+  // между проверкой и начислением. Списки обязаны совпадать один в один.
+  function bbFingerprint(p) {
+    return JSON.stringify({
+      audience_kind: p.audience_kind,
+      audience_params: p.audience_params,
+      exclude_recent_days: p.exclude_recent_days,
+      amount: p.amount,
+      ttl_days: p.ttl_days,
+      tag: p.tag,
+    });
+  }
+
+  function bbLock(reason) {
+    bbCheckedPayload = null;
+    // Прошлое начисление больше не описывает текущие настройки —
+    // сводка запуска не должна утверждать, что бонусы уже начислены.
+    bbGranted = null;
+    const btn = $("bbGrantBtn");
+    if (btn) btn.disabled = true;
+    if (reason && $("bbResult") && !$("bbResult").classList.contains("d-none")) {
+      $("bbResult").insertAdjacentHTML("beforeend",
+        `<div class="text-warning small mt-1"><i class="bi bi-exclamation-triangle me-1"></i>${reason}</div>`);
+    }
+  }
+
+  function bbError(msg) {
+    const el = $("bbErr");
+    if (!el) return;
+    el.textContent = `✗ ${msg}`;
+    el.classList.remove("d-none");
+  }
+
+  function bbRenderResult(res) {
+    const box = $("bbResult");
+    if (!box) return;
+    box.classList.remove("d-none");
+    const granted = res.dry_run ? res.to_grant : res.granted;
+    const sum = (res.dry_run ? res.to_grant : res.granted) * (res.amount_per_client || 0);
+    box.innerHTML = `
+      <div><i class="bi bi-people me-1"></i>В аудитории: <b>${fmtNum(res.audience_total)}</b>
+        ${res.already_granted ? `<span class="text-muted small">· уже получили по этой метке: ${fmtNum(res.already_granted)}</span>` : ""}</div>
+      <div><i class="bi bi-gift me-1"></i>${res.dry_run ? "Начислим" : "Начислено"}:
+        <b>${fmtNum(granted)}</b> клиентам по ${fmtNum(res.amount_per_client)} бонусов</div>
+      <div><i class="bi bi-cash-stack me-1"></i>Обязательств на сумму: <b>${fmtNum(sum)} ₸</b>
+        <span class="text-muted small">· сгорят через ${res.ttl_days} дней</span></div>
+      ${res.balance_cache_fixed ? `<div class="text-muted small mt-1">
+        <i class="bi bi-wrench me-1"></i>Попутно исправлен фиктивный баланс в карточках:
+        ${fmtNum(res.balance_cache_fixed)} клиентов${res.balance_cache_delta > 0
+          ? ` — в сумме ${fmtNum(res.balance_cache_delta)} ₸ бонусов, которых на самом деле уже нет.
+              Эти клиенты увидят падение суммы, о нём стоит написать в тексте рассылки.` : ""}</div>` : ""}
+      ${res.note ? `<div class="text-muted small mt-1">${res.note}</div>` : ""}
+      ${(res.errors || []).length ? `<div class="text-danger small mt-1">Ошибки: ${res.errors.join("; ")}</div>` : ""}
+    `;
+  }
+
+  $("bbEnabled")?.addEventListener("change", (e) => {
+    $("bbBox")?.classList.toggle("d-none", !e.target.checked);
+    renderSummary();
+  });
+
+  // ── Пресеты суммы и срока ──────────────────────────
+  // Селект — источник значения, число под ним открывается только для «своё».
+  function bindPreset(selId, inputId) {
+    const sel = $(selId), inp = $(inputId);
+    if (!sel || !inp) return;
+    sel.addEventListener("change", () => {
+      const custom = sel.value === "custom";
+      inp.classList.toggle("d-none", !custom);
+      if (custom) inp.focus();
+      else inp.value = sel.value;
+      bbLock("Настройки изменились — проверьте ещё раз.");
+      bbUpdateTtlHint();
+      renderSummary();
+    });
+  }
+  bindPreset("bbAmountSel", "bbAmount");
+  bindPreset("bbTtlSel", "bbTtl");
+
+  // Срок жизни бонуса должен переживать саму отправку: последние в очереди
+  // получают сообщение через count/daily_cap дней после начисления.
+  function bbUpdateTtlHint() {
+    const hint = $("bbTtlHint");
+    if (!hint) return;
+    const count = lastEstimate?.count || 0;
+    const cap = parseInt($("bcDailyCap")?.value || "250", 10) || 250;
+    const ttl = parseInt($("bbTtl")?.value || "0", 10) || 0;
+    if (!count || !ttl) { hint.textContent = ""; return; }
+
+    const sendDays = Math.ceil(count / cap);
+    if (sendDays <= 1) {
+      hint.innerHTML = `<i class="bi bi-check2 me-1"></i>Рассылка уйдёт за день — весь срок достанется клиенту целиком.`;
+      hint.className = "text-muted small";
+      return;
+    }
+    const lostPct = Math.round(sendDays / ttl * 100);
+    if (lostPct >= 20) {
+      hint.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>Отправка займёт ~${sendDays} дн.
+        Последние в очереди получат сообщение, когда ${lostPct}% срока уже прошло —
+        стоит поднять срок хотя бы до ${Math.max(ttl, sendDays * 6)} дней.`;
+      hint.className = "text-warning small";
+    } else {
+      hint.innerHTML = `<i class="bi bi-check2 me-1"></i>Отправка займёт ~${sendDays} дн. —
+        последние в очереди потеряют всего ${lostPct}% срока.`;
+      hint.className = "text-muted small";
+    }
+  }
+  $("bcDailyCap")?.addEventListener("input", bbUpdateTtlHint);
+
+  // Любое изменение аудитории или параметров бонуса сбрасывает проверку
+  ["bcMinBonus", "bcInactiveDays", "bcInactiveDaysMax", "bcTier", "bcSegment",
+   "bcCampaign", "bcExcludeDays", "bbAmount", "bbTtl", "bbTag"].forEach(id => {
+    $(id)?.addEventListener("input", () => bbLock("Настройки изменились — проверьте ещё раз."));
+  });
+  document.querySelectorAll('input[name="bcAudience"]').forEach(r => {
+    r.addEventListener("change", () => bbLock("Аудитория изменилась — проверьте ещё раз."));
+  });
+
+  $("bbDryBtn")?.addEventListener("click", async () => {
+    $("bbErr")?.classList.add("d-none");
+    const payload = bbCollect(true);
+    if (!payload.amount) { uiToast("Укажите сумму бонуса", "warning"); return; }
+    if (payload.tag.length < 2) { uiToast("Укажите метку акции (минимум 2 символа)", "warning"); return; }
+
+    const btn = $("bbDryBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Считаем…';
+    try {
+      const res = await apiPost(`${API}/bulk-bonus`, payload);
+      bbRenderResult(res);
+      if (res.to_grant > 0) {
+        bbCheckedPayload = payload;
+        if ($("bbGrantBtn")) $("bbGrantBtn").disabled = false;
+      } else {
+        bbLock(null);
+      }
+    } catch (e) {
+      bbError(e.message);
+      bbLock(null);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-calculator me-1"></i>Проверить';
+    }
+  });
+
+  $("bbGrantBtn")?.addEventListener("click", async () => {
+    $("bbErr")?.classList.add("d-none");
+    if (!bbCheckedPayload) { uiToast("Сначала нажмите «Проверить»", "warning"); return; }
+
+    const now = bbCollect(false);
+    if (bbFingerprint(now) !== bbFingerprint(bbCheckedPayload)) {
+      bbLock("Настройки изменились после проверки — проверьте ещё раз.");
+      uiToast("Настройки изменились — проверьте ещё раз", "warning");
+      return;
+    }
+
+    const total = fmtNum(bbCheckedPayload.amount);
+    if (!confirm(
+      `Начислить по ${total} бонусов каждому клиенту сегмента?\n\n` +
+      `Метка акции: ${bbCheckedPayload.tag}\n` +
+      `Срок жизни: ${bbCheckedPayload.ttl_days} дней\n\n` +
+      `Отменить начисление одной кнопкой нельзя.`
+    )) return;
+
+    const btn = $("bbGrantBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Начисляем…';
+    try {
+      const res = await apiPost(`${API}/bulk-bonus`, { ...bbCheckedPayload, dry_run: false });
+      bbRenderResult(res);
+      uiToast(`Начислено ${fmtNum(res.granted)} клиентам 🎁`, "success");
+      bbGranted = {
+        tag: bbCheckedPayload.tag,
+        amount: bbCheckedPayload.amount,
+        ttl_days: bbCheckedPayload.ttl_days,
+        granted: res.granted,
+      };
+      bbCheckedPayload = null;
+      renderSummary();
+      loadBonusReport();
+    } catch (e) {
+      bbError(e.message);
+      uiToast(`Не удалось начислить: ${e.message}`, "error");
+    } finally {
+      btn.innerHTML = '<i class="bi bi-gift me-1"></i>Начислить';
+      btn.disabled = true;   // после начисления нужна новая проверка
+    }
+  });
+
+  // ── Отчёт по акциям ────────────────────────────────
+  async function loadBonusReport() {
+    const box = $("bbReportList");
+    if (!box) return;
+    try {
+      const data = await apiGet(`${API}/bulk-bonus`);
+      const items = data.items || [];
+      if (!items.length) {
+        box.innerHTML = '<div class="text-muted small">Массовых начислений ещё не было. ' +
+          'Сделайте первое в шаге 2 вкладки «Новая рассылка».</div>';
+        return;
+      }
+      box.innerHTML = items.map(it => {
+        const dt = it.granted_at
+          ? new Date(it.granted_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })
+          : "—";
+        const exp = it.expires_at
+          ? new Date(it.expires_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })
+          : "—";
+        return `
+        <div class="wa-bc-item">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div><b>${it.tag}</b>
+              <span class="text-muted small ms-1">· начислено ${dt} · сгорает ${exp}</span></div>
+            <span class="badge ${it.activation_percent >= 10 ? "text-bg-success" : "text-bg-secondary"}">
+              дошли до покупки: ${it.activation_percent}%
+            </span>
+          </div>
+          <div class="row g-2">
+            <div class="col-6 col-md-3"><div class="bb-metric">
+              <b>${fmtNum(it.clients)}</b><small>клиентов</small></div></div>
+            <div class="col-6 col-md-3"><div class="bb-metric">
+              <b>${fmtNum(it.clients_activated)}</b><small>потратили бонус</small></div></div>
+            <div class="col-6 col-md-3"><div class="bb-metric">
+              <b>${fmtNum(it.issued)} ₸</b><small>выдано бонусов</small></div></div>
+            <div class="col-6 col-md-3"><div class="bb-metric">
+              <b>${fmtNum(it.used)} ₸</b><small>списано (${it.used_percent}%)</small></div></div>
+          </div>
+          ${it.expired ? `<div class="text-muted small mt-2">Сгорело не потраченными: ${fmtNum(it.expired)} начислений</div>` : ""}
+        </div>`;
+      }).join("");
+    } catch (e) {
+      box.innerHTML = `<div class="text-danger small">Ошибка: ${e.message}</div>`;
+    }
+  }
+
+  $("bbReportRefresh")?.addEventListener("click", loadBonusReport);
+  $("waBonusTabBtn")?.addEventListener("click", loadBonusReport);
 
   // ═══════════════════════════════════════════════════
   // История
