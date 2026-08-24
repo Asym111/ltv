@@ -251,6 +251,11 @@
               <i class="bi bi-coin me-1"></i>{бонусы} — баланс клиента
             </button>
             <button class="btn btn-sm btn-outline-secondary" type="button" data-var="{уровень}">{уровень}</button>
+            <button class="btn btn-sm btn-outline-primary" type="button"
+                    data-var="[[вариант 1|вариант 2|вариант 3]]"
+                    title="Каждый клиент получит один из вариантов — одинаковые письма подряд выдают бота">
+              <i class="bi bi-shuffle me-1"></i>Вариант текста
+            </button>
             <select id="bcTemplateSelect" class="form-select form-select-sm ms-auto" style="max-width:220px">
               <option value="">Вставить шаблон…</option>
             </select>
@@ -267,7 +272,13 @@
 
           <div class="row g-2 mt-2">
             <div class="col-12 col-md-6">
-              <label class="settings-label">Предпросмотр (первый получатель)</label>
+              <div class="d-flex align-items-center justify-content-between">
+                <label class="settings-label mb-0">Предпросмотр (первый получатель)</label>
+                <button class="btn btn-sm btn-link p-0" type="button" id="bcRerollBtn"
+                        title="Показать другой случайный вариант">
+                  <i class="bi bi-shuffle me-1"></i>другой вариант
+                </button>
+              </div>
               <div id="bcPreviewBox" class="wa-preview-box mt-1">
                 <div class="text-muted small">Напишите текст и посчитайте аудиторию</div>
               </div>

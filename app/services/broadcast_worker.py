@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime
@@ -101,6 +102,32 @@ RU_ALIASES = {
 TIER_RU = {"Bronze": "Бронза", "Silver": "Серебро", "Gold": "Золото"}
 
 
+_SPIN_RE = re.compile(r"\[\[([^\[\]]+)\]\]")
+
+
+def spin(text: str) -> str:
+    """
+    Разворачивает [[вариант1|вариант2|вариант3]] в один случайный вариант.
+
+    Зачем: 3243 идентичных сообщения подряд — самый явный признак бота для
+    антиспама WhatsApp. Каждый получатель получает свою формулировку, смысл
+    при этом сохраняется.
+
+    Пример шаблона:
+        [[Здравствуйте|Добрый день|Приветствуем]], {имя}!
+        [[Давно вас не видели|Вы давно к нам не заглядывали]].
+
+    Вложенность не поддерживается — намеренно, чтобы шаблон оставался
+    читаемым для менеджера.
+    """
+    def _pick(m: re.Match) -> str:
+        options = [o.strip() for o in m.group(1).split("|") if o.strip()]
+        return random.choice(options) if options else ""
+
+    # Несколько проходов не нужны: вложенностей нет
+    return _SPIN_RE.sub(_pick, str(text or ""))
+
+
 def render_message(template: str, variables: dict) -> str:
     """
     Подставляет переменные. Поддерживает русские алиасы {имя} {бонусы} {уровень}
@@ -132,12 +159,14 @@ def render_for_user(db: Session, template: str, msg: WaMessage) -> str:
         except Exception as e:
             logger.warning(f"render_for_user balances failed user={msg.user_id}: {e}")
 
-    return render_message(template, {
+    # Порядок важен: сначала подставляются переменные, потом выбирается
+    # вариант. Иначе [[...]] внутри значения переменной не развернулись бы.
+    return spin(render_message(template, {
         "name": name,
         "bonus": bonus,
         "tier": tier,
         "phone": msg.phone,
-    })
+    }))
 
 
 # ── Основной цикл ─────────────────────────────────────────────

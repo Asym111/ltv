@@ -268,6 +268,26 @@ function initWhatsappPage() {
     btn.addEventListener("click", () => insertVar(btn.dataset.var));
   });
 
+  // Зеркало spin() из broadcast_worker.py: [[а|б|в]] → один случайный вариант.
+  const SPIN_RE = /\[\[([^\[\]]+)\]\]/g;
+
+  function spinLocal(text) {
+    return String(text || "").replace(SPIN_RE, (_, body) => {
+      const opts = body.split("|").map(o => o.trim()).filter(Boolean);
+      return opts.length ? opts[Math.floor(Math.random() * opts.length)] : "";
+    });
+  }
+
+  // Сколько разных писем даёт шаблон: произведение числа вариантов в блоках.
+  function spinVariants(text) {
+    let total = 1;
+    for (const m of String(text || "").matchAll(SPIN_RE)) {
+      const n = m[1].split("|").map(o => o.trim()).filter(Boolean).length;
+      if (n > 1) total *= n;
+    }
+    return total;
+  }
+
   function renderLocal(template, vars) {
     let t = String(template || "");
     const map = {
@@ -279,7 +299,8 @@ function initWhatsappPage() {
     for (const [k, v] of Object.entries(map)) {
       t = t.split("{" + k + "}").join(String(v ?? ""));
     }
-    return t;
+    // Порядок как в воркере: сначала переменные, потом выбор варианта
+    return spinLocal(t);
   }
 
   const TIER_RU_MAP = { Bronze: "Бронза", Silver: "Серебро", Gold: "Золото" };
@@ -301,11 +322,17 @@ function initWhatsappPage() {
 
   function onMessageChange() {
     const msg = $("bcMessage")?.value || "";
-    if ($("bcCharCount")) $("bcCharCount").textContent = msg.length;
+    if ($("bcCharCount")) {
+      const v = spinVariants(msg);
+      $("bcCharCount").textContent = v > 1
+        ? `${msg.length} · ${v} ${plural(v, "вариант", "варианта", "вариантов")} письма`
+        : String(msg.length);
+    }
     renderPreview();
     renderSummary();
   }
   $("bcMessage")?.addEventListener("input", onMessageChange);
+  $("bcRerollBtn")?.addEventListener("click", renderPreview);
 
   $("bcTestBtn")?.addEventListener("click", async () => {
     const phone = ($("bcTestPhone")?.value || "").trim();

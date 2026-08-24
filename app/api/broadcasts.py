@@ -23,6 +23,7 @@ from app.services.broadcast_audience import build_audience, estimate_audience, A
 from app.services.loyalty_engine import get_balances, _now as loyalty_now
 from app.services.broadcast_worker import (
     render_message,
+    spin,
     start_broadcast_worker,
     log_wa_message,
     _in_send_window,
@@ -363,7 +364,9 @@ def test_send(payload: TestSendIn, request: Request, db: Session = Depends(get_d
     except Exception:
         pass
 
-    text = render_message(payload.message_template, variables)
+    # spin в том же порядке, что и в воркере, — тест должен показывать
+    # ровно то, что получит клиент, а не сырые [[а|б]].
+    text = spin(render_message(payload.message_template, variables))
     result = send_message(payload.phone, text, tenant_id=str(tenant_id))
     log_wa_message(
         db,
