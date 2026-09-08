@@ -21,7 +21,7 @@ from sqlalchemy import desc, select
 
 from app.core.database import get_db
 from app.core.roles import TRANSACTION_ROLES, CLIENT_ACCESS_ROLES
-from app.core.tenant_utils import must_network_id
+from app.core.tenant_utils import must_network_id, get_tenant_ids_for_user
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
@@ -211,19 +211,26 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 
 @router.post("/{tx_id}/refund", response_model=TransactionOut)
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
-    tenant_id = must_tenant_id(request)
+    must_tenant_id(request)
     require_role(request, *CLIENT_ACCESS_ROLES)
-    settings = get_settings(db, tenant_id=tenant_id)
     now = _now()
+
+    # Возврат разрешён по любой транзакции в пределах доступных пользователю филиалов,
+    # а не только текущего — иначе продажу из другого филиала вернуть невозможно.
+    allowed_ids = get_tenant_ids_for_user(request, db)
 
     tx = (
         db.query(Transaction)
-        .filter(Transaction.tenant_id == tenant_id)
+        .filter(Transaction.tenant_id.in_(allowed_ids))
         .filter(Transaction.id == tx_id)
         .first()
     )
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Настройки лояльности берём того филиала, где транзакция была пробита.
+    tenant_id = int(tx.tenant_id)
+    settings = get_settings(db, tenant_id=tenant_id)
 
     if tx.status == "refunded":
         raise HTTPException(status_code=400, detail="Transaction already fully refunded")
@@ -374,21 +381,40 @@ def list_by_phone(user_phone: str, request: Request, db: Session = Depends(get_d
 def list_transactions(
     request: Request,
     phone: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=500),
+    tx_id: Optional[int] = Query(default=None, description="Точный поиск по ID транзакции"),
+    limit: int = Query(default=200, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     date_from: Optional[str] = Query(default=None, description="YYYY-MM-DD"),
     date_to:   Optional[str] = Query(default=None, description="YYYY-MM-DD"),
+    all_branches: bool = Query(default=True, description="Искать по всем доступным филиалам сети"),
     db: Session = Depends(get_db),
 ):
     tenant_id = must_tenant_id(request)
     require_role(request, *TRANSACTION_ROLES)
 
+    # Область поиска: по умолчанию — все филиалы, доступные пользователю.
+    # Иначе транзакции, пробитые в другом филиале, не находятся вообще.
+    allowed_ids = get_tenant_ids_for_user(request, db)
+    scope_ids = allowed_ids if all_branches else [tenant_id]
+
     q = (
         db.query(Transaction, User.phone)
         .join(User, User.id == Transaction.user_id)
-        .filter(Transaction.tenant_id == tenant_id)
+        .filter(Transaction.tenant_id.in_(scope_ids))
         .filter(User.tenant_id == must_network_id(request))
     )
+
+    if tx_id:
+        # Поиск по ID — точечный, остальные фильтры (телефон/даты) не применяем,
+        # чтобы транзакция находилась даже если она очень старая.
+        q = q.filter(Transaction.id == int(tx_id))
+        rows = q.all()
+        out: List[TransactionOut] = []
+        for t, user_phone in rows:
+            item = TransactionOut.model_validate(t)
+            item.user_phone = decrypt_field(user_phone) or user_phone or ""
+            out.append(item)
+        return out
 
     if phone:
         p = normalize_phone(phone)

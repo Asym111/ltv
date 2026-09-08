@@ -2095,7 +2095,7 @@ function initClientCard() {
       const list = Array.isArray(rows) ? rows : [];
 
       if (!list.length) {
-        txTableBody.innerHTML = `<tr><td colspan="6" class="text-muted">Транзакций пока нет</td></tr>`;
+        txTableBody.innerHTML = `<tr><td colspan="7" class="text-muted">Транзакций пока нет</td></tr>`;
         return;
       }
 
@@ -2109,6 +2109,11 @@ function initClientCard() {
             <td class="text-end">${fmtMoney(t.paid_amount ?? t.amount)}</td>
             <td class="text-end">${fmt0(getRedeem(t))}</td>
             <td class="text-end">${fmt0(getEarned(t))}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-danger" href="/admin/transactions?tx_id=${encodeURIComponent(t.id)}" title="Открыть транзакцию для возврата">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </a>
+            </td>
           </tr>
         `
         )
@@ -2116,7 +2121,7 @@ function initClientCard() {
     } catch (e) {
       show(txError, `Ошибка загрузки транзакций: ${e.message}`, true);
       txError?.classList.remove("d-none");
-      txTableBody.innerHTML = `<tr><td colspan="6" class="text-muted">Ошибка</td></tr>`;
+      txTableBody.innerHTML = `<tr><td colspan="7" class="text-muted">Ошибка</td></tr>`;
     }
   }
 
