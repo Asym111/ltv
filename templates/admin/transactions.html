@@ -15,18 +15,53 @@
 
   <div class="col-12">
     <div class="card p-3">
-      <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-        <div>
-          <div class="h6 mb-0">Поиск транзакций</div>
-          <div class="text-muted small">Введи телефон клиента и нажми “Найти”.</div>
+      <div class="h6 mb-0">Поиск транзакций</div>
+      <div class="text-muted small">Ищи по ID транзакции, телефону или периоду. Поиск идёт по всем филиалам сети и по всей истории.</div>
+
+      <div class="row g-2 mt-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">ID транзакции</label>
+          <input class="form-control" id="txIdInput" type="number" min="1" step="1" placeholder="напр. 4345">
         </div>
 
-        <div class="d-flex gap-2">
-          <input class="form-control" id="txPhoneInput" placeholder="77001234567 или 87770000000" style="min-width: 280px;">
-          <button class="btn btn-primary" id="txSearchBtn"><i class="bi bi-search me-1"></i>Найти</button>
+        <div class="col-6 col-md-3">
+          <label class="form-label small mb-1">Телефон</label>
+          <input class="form-control" id="txPhoneInput" placeholder="77001234567 или 87770000000">
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Дата с</label>
+          <input class="form-control" id="txDateFrom" type="date">
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Дата по</label>
+          <input class="form-control" id="txDateTo" type="date">
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small mb-1">Показывать</label>
+          <select class="form-select" id="txLimit">
+            <option value="200">200</option>
+            <option value="500">500</option>
+            <option value="1000" selected>1000</option>
+            <option value="5000">5000</option>
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1 d-grid">
+          <button class="btn btn-primary" id="txSearchBtn"><i class="bi bi-search"></i></button>
         </div>
       </div>
-      <div class="text-muted small mt-2">Подсказка: оставь поле телефона пустым и нажми “Найти” — загрузятся последние 200 транзакций.</div>
+
+      <div class="d-flex flex-wrap gap-3 align-items-center mt-2">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="txAllBranches" checked>
+          <label class="form-check-label small" for="txAllBranches">Искать по всем филиалам сети</label>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="txResetBtn">Сбросить фильтры</button>
+      </div>
+      <div class="text-muted small mt-2">Подсказка: ID транзакции ищется точечно — телефон и даты при этом игнорируются, находится даже самая старая транзакция.</div>
     </div>
   </div>
 
@@ -37,7 +72,7 @@
           <div class="h6 mb-0">Результаты</div>
           <div class="text-muted small" id="txMeta"></div>
         </div>
-        <div class="text-muted small">Лимит: 200</div>
+        <div class="text-muted small" id="txLimitInfo"></div>
       </div>
 
       <div class="table-responsive mt-3">
@@ -57,6 +92,12 @@
           </thead>
           <tbody id="txTbody"></tbody>
         </table>
+      </div>
+
+      <div class="text-center mt-2">
+        <button class="btn btn-outline-primary btn-sm d-none" id="txMoreBtn">
+          <i class="bi bi-arrow-down-circle me-1"></i>Показать ещё
+        </button>
       </div>
     </div>
   </div>
@@ -193,6 +234,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const txTbody = document.getElementById('txTbody');
   const txMeta = document.getElementById('txMeta');
   const txPhoneInput = document.getElementById('txPhoneInput');
+  const txIdInput = document.getElementById('txIdInput');
+  const txDateFrom = document.getElementById('txDateFrom');
+  const txDateTo = document.getElementById('txDateTo');
+  const txLimitSel = document.getElementById('txLimit');
+  const txAllBranches = document.getElementById('txAllBranches');
+  const txLimitInfo = document.getElementById('txLimitInfo');
+  const txMoreBtn = document.getElementById('txMoreBtn');
+  const txResetBtn = document.getElementById('txResetBtn');
   const txSearchBtn = document.getElementById('txSearchBtn');
   const txRefreshBtn = document.getElementById('txRefreshBtn');
   const txOpenCreateBtn = document.getElementById('txOpenCreateBtn');
@@ -215,6 +264,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const txRefundSubmit = document.getElementById('txRefundSubmit');
 
   let lastPhone = '';
+  let lastFilters = null;   // фильтры последнего поиска
+  let loadedCount = 0;      // сколько строк уже показано (для «Показать ещё»)
   let refundTx = null;
   let currentClientAvailable = null;
   let currentClientPending = null;
@@ -251,8 +302,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return '<span class="badge text-bg-success">Принято</span>';
   }
 
-  function renderTxRows(rows) {
-    txTbody.innerHTML = '';
+  function renderTxRows(rows, append) {
+    if (!append) txTbody.innerHTML = '';
     for (const t of rows) {
       const canRefund = (t.status !== 'refunded');
       const btnRefund = canRefund
@@ -284,12 +335,82 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function currentFilters() {
+    return {
+      tx_id: (txIdInput.value || '').trim(),
+      phone: (txPhoneInput.value || '').trim(),
+      date_from: (txDateFrom.value || '').trim(),
+      date_to: (txDateTo.value || '').trim(),
+      limit: txLimitSel.value || '1000',
+      all_branches: txAllBranches.checked ? 'true' : 'false'
+    };
+  }
+
+  async function fetchTx(f, offset) {
+    const qs = new URLSearchParams({
+      limit: String(f.limit),
+      offset: String(offset || 0),
+      all_branches: f.all_branches
+    });
+    if (f.tx_id) {
+      qs.set('tx_id', f.tx_id);
+    } else {
+      if (f.phone) qs.set('phone', f.phone);
+      if (f.date_from) qs.set('date_from', f.date_from);
+      if (f.date_to) qs.set('date_to', f.date_to);
+    }
+    return await apiGetJson(`/api/transactions/?${qs.toString()}`);
+  }
+
+  function describeFilters(f) {
+    const parts = [];
+    if (f.tx_id) parts.push(`ID: ${f.tx_id}`);
+    if (!f.tx_id && f.phone) parts.push(`тел: ${f.phone}`);
+    if (!f.tx_id && (f.date_from || f.date_to)) parts.push(`период: ${f.date_from || '…'} — ${f.date_to || '…'}`);
+    if (f.all_branches === 'true') parts.push('все филиалы');
+    return parts.length ? ` (${parts.join(', ')})` : '';
+  }
+
+  // Совместимость: loadTransactions(phone) по-прежнему работает
   async function loadTransactions(phone) {
-    const qs = new URLSearchParams({ limit: '200', offset: '0' });
-    if (phone) qs.set('phone', phone);
-    const rows = await apiGetJson(`/api/transactions/?${qs.toString()}`);
-    txMeta.textContent = phone ? `Найдено: ${rows.length} (тел: ${phone})` : `Последние: ${rows.length}`;
-    renderTxRows(rows);
+    if (typeof phone === 'string') {
+      txPhoneInput.value = phone;
+      if (phone) txIdInput.value = '';
+    }
+    await runSearch();
+  }
+
+  async function runSearch() {
+    const f = currentFilters();
+    lastFilters = f;
+    lastPhone = f.phone;
+
+    const rows = await fetchTx(f, 0);
+    loadedCount = rows.length;
+
+    renderTxRows(rows, false);
+    txMeta.textContent = `Найдено: ${rows.length}${describeFilters(f)}`;
+    txLimitInfo.textContent = f.tx_id ? 'Точечный поиск по ID' : `Лимит: ${f.limit}`;
+
+    if (!rows.length) {
+      txTbody.innerHTML = `<tr><td colspan="9" class="text-muted">Ничего не найдено. Проверь ID/телефон, сними фильтр по датам и оставь галочку «по всем филиалам».</td></tr>`;
+    }
+
+    txMoreBtn.classList.toggle('d-none', !!f.tx_id || rows.length < Number(f.limit));
+  }
+
+  async function loadMore() {
+    if (!lastFilters) return;
+    txMoreBtn.disabled = true;
+    try {
+      const rows = await fetchTx(lastFilters, loadedCount);
+      loadedCount += rows.length;
+      renderTxRows(rows, true);
+      txMeta.textContent = `Показано: ${loadedCount}${describeFilters(lastFilters)}`;
+      txMoreBtn.classList.toggle('d-none', rows.length < Number(lastFilters.limit));
+    } finally {
+      txMoreBtn.disabled = false;
+    }
   }
 
   async function loadClientMeta(phone) {
@@ -349,14 +470,37 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${yy}-${mm}-${dd}`;
   }
 
-  txSearchBtn.addEventListener('click', async () => {
-    const phone = txPhoneInput.value.trim();
-    lastPhone = phone;
-    await loadTransactions(phone);
+  txSearchBtn.addEventListener('click', () => runSearch());
+  txMoreBtn.addEventListener('click', () => loadMore());
+
+  [txIdInput, txPhoneInput, txDateFrom, txDateTo].forEach(el => {
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); runSearch(); }
+    });
+  });
+
+  txIdInput.addEventListener('input', () => {
+    // ID — точечный поиск, остальные фильтры не мешают
+    const on = !!txIdInput.value.trim();
+    txPhoneInput.disabled = on;
+    txDateFrom.disabled = on;
+    txDateTo.disabled = on;
+  });
+
+  txResetBtn.addEventListener('click', async () => {
+    txIdInput.value = '';
+    txPhoneInput.value = '';
+    txDateFrom.value = '';
+    txDateTo.value = '';
+    txPhoneInput.disabled = false;
+    txDateFrom.disabled = false;
+    txDateTo.disabled = false;
+    txAllBranches.checked = true;
+    await runSearch();
   });
 
   txRefreshBtn.addEventListener('click', async () => {
-    await loadTransactions(lastPhone);
+    await runSearch();
   });
 
   txOpenCreateBtn.addEventListener('click', async () => {
@@ -410,7 +554,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       await apiPostJson('/api/transactions/', payload);
       txCreateModal.hide();
-      await loadTransactions(lastPhone);
+      await runSearch();
     } catch (e) {
       txCreateError.textContent = (e && e.message) ? e.message : String(e);
       txCreateError.classList.remove('d-none');
@@ -453,7 +597,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       await apiPostJson(`/api/transactions/${refundTx}/refund`, payload);
       txRefundModal.hide();
-      await loadTransactions(lastPhone);
+      await runSearch();
     } catch (e) {
       txRefundError.textContent = (e && e.message) ? e.message : String(e);
       txRefundError.classList.remove('d-none');
@@ -462,7 +606,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  loadTransactions('');
+  // Предзаполнение из URL: /admin/transactions?tx_id=4345 или ?phone=77001234567
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('tx_id')) {
+    txIdInput.value = urlParams.get('tx_id');
+    txIdInput.dispatchEvent(new Event('input'));
+  }
+  if (urlParams.get('phone')) txPhoneInput.value = urlParams.get('phone');
+
+  runSearch();
 });
 </script>
 {% endblock %}
