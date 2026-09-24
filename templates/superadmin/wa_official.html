@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Официальный WhatsApp — Superadmin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css"/>
+  <style>
+    :root { --bg:#0f1117; --card:#1a1d27; --accent:#7c3aed; --mint:#00c2a8; --text:#e2e8f0; --muted:#64748b; --border:#2d3148; --ok:#16a34a; --bad:#dc2626; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif; min-height:100vh; }
+    header { background:var(--card); border-bottom:1px solid var(--border); padding:1rem 2rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .logo { display:flex; align-items:center; gap:.75rem; font-weight:700; font-size:1.1rem; }
+    .logo-badge { background:var(--accent); color:#fff; padding:.25rem .6rem; border-radius:.4rem; font-size:.8rem; }
+    .btn { padding:.5rem 1rem; border-radius:.5rem; border:none; cursor:pointer; font-size:.875rem; font-weight:500; text-decoration:none; display:inline-flex; align-items:center; gap:.4rem; }
+    .btn-primary { background:var(--mint); color:#000; }
+    .btn-secondary { background:var(--border); color:var(--text); }
+    main { max-width:1200px; margin:2rem auto; padding:0 1.5rem; }
+    h1 { font-size:1.5rem; font-weight:700; margin-bottom:.25rem; }
+    .subtitle { color:var(--muted); font-size:.875rem; margin-bottom:1.5rem; line-height:1.5; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem; }
+    .net-head { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .net-title { font-size:1.15rem; font-weight:700; }
+    .balance { font-size:2rem; font-weight:800; color:var(--mint); line-height:1; }
+    .balance-sub { color:var(--muted); font-size:.8rem; }
+    label { display:block; font-size:.75rem; color:var(--muted); margin-bottom:.3rem; }
+    input, select { width:100%; background:#0f1117; border:1px solid var(--border); color:var(--text); padding:.55rem .7rem; border-radius:.5rem; font-size:.875rem; }
+    input:focus, select:focus { outline:none; border-color:var(--accent); }
+    .grid { display:grid; gap:.75rem; }
+    .g4 { grid-template-columns:repeat(4, minmax(0,1fr)); }
+    .g3 { grid-template-columns:repeat(3, minmax(0,1fr)); }
+    @media (max-width: 800px) { .g4, .g3 { grid-template-columns:1fr; } }
+    .section-title { font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:1.25rem 0 .6rem; }
+    .member { border:1px solid var(--border); border-radius:.6rem; padding:1rem; margin-bottom:.75rem; }
+    .member-head { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:.75rem; }
+    .badge { padding:.2rem .6rem; border-radius:9999px; font-size:.72rem; font-weight:600; }
+    .b-ok { background:rgba(22,163,74,.15); color:#4ade80; }
+    .b-bad { background:rgba(220,38,38,.15); color:#f87171; }
+    .b-none { background:var(--border); color:var(--muted); }
+    .alert { padding:.8rem 1rem; border-radius:.5rem; margin-bottom:1rem; font-size:.9rem; }
+    .alert-ok { background:rgba(22,163,74,.12); border:1px solid rgba(22,163,74,.4); }
+    .alert-bad { background:rgba(220,38,38,.12); border:1px solid rgba(220,38,38,.4); }
+    table { width:100%; border-collapse:collapse; font-size:.8rem; }
+    th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:500; }
+    .plus { color:#4ade80; } .minus { color:#f87171; }
+    code { background:#0f1117; padding:.15rem .35rem; border-radius:.3rem; font-size:.75rem; word-break:break-all; }
+    .hint { color:var(--muted); font-size:.75rem; margin-top:.4rem; line-height:1.5; }
+    .row-end { display:flex; align-items:flex-end; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="logo-badge">SA</span> Официальный WhatsApp и кредиты</div>
+  <div style="display:flex;gap:.5rem;">
+    <a href="/superadmin" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Аккаунты</a>
+    <a href="/superadmin/logout" class="btn btn-secondary"><i class="bi bi-box-arrow-right"></i> Выйти</a>
+  </div>
+</header>
+
+<main>
+  <h1>Рассылки через официальный WhatsApp</h1>
+  <p class="subtitle">
+    Мы — партнёр 360dialog (оплата с нашего баланса). Компания платит нам, мы начисляем кредиты: <b>1 кредит = 1 сообщение</b>.
+    Кредиты общие на сеть и списываются при отправке; если Meta не доставила сообщение — кредит возвращается автоматически.<br>
+    Ключ канала берётся в 360dialog Partner Hub после подключения номера клиента. Уведомления о бонусах по-прежнему идут через QR-номер.
+    {% if not public_base %}<br><b style="color:#f87171">PUBLIC_BASE_URL не задан в .env — вебхук статусов доставки не будет установлен.</b>{% endif %}
+  </p>
+
+  {% if msg %}<div class="alert alert-ok">{{ msg }}</div>{% endif %}
+  {% if err %}<div class="alert alert-bad">{{ err }}</div>{% endif %}
+
+  {% for n in networks %}
+  <div class="card">
+    <div class="net-head">
+      <div>
+        <div class="net-title">#{{ n.root.id }} · {{ n.root.name }}</div>
+        <div class="balance-sub">Сеть: {{ n.members|length }} {{ 'филиал' if n.members|length == 1 else 'филиала' }}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="balance">{{ "{:,}".format(n.balance).replace(",", " ") }}</div>
+        <div class="balance-sub">кредитов на балансе</div>
+      </div>
+    </div>
+
+    <div class="section-title">Пополнить / скорректировать</div>
+    <form method="post" action="/superadmin/wa-official/{{ n.root.id }}/topup" class="grid g4">
+      <div><label>Кредитов (минус — списать)</label><input type="number" name="credits" value="1000" required></div>
+      <div><label>Оплачено, ₸ (справочно)</label><input type="number" name="amount_kzt" min="0" placeholder="например 45000"></div>
+      <div><label>Комментарий</label><input type="text" name="comment" maxlength="200" placeholder="Счёт № / Kaspi"></div>
+      <div class="row-end"><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center"><i class="bi bi-plus-circle"></i> Провести</button></div>
+    </form>
+
+    {% if n.ledger %}
+    <div class="section-title">Последние движения</div>
+    <table>
+      <thead><tr><th>Дата</th><th>Тип</th><th>Кредиты</th><th>Баланс после</th><th>₸</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for l in n.ledger %}
+        <tr>
+          <td>{{ l.created_at[:16].replace('T',' ') if l.created_at else '' }}</td>
+          <td>{{ {'topup':'Пополнение','charge':'Рассылка','refund':'Возврат','adjust':'Корректировка'}.get(l.kind, l.kind) }}</td>
+          <td class="{{ 'plus' if l.delta > 0 else 'minus' }}">{{ '+' if l.delta > 0 else '' }}{{ l.delta }}</td>
+          <td>{{ l.balance_after }}</td>
+          <td>{{ l.amount_kzt or '' }}</td>
+          <td>{{ l.comment or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <div class="section-title">Номера официального WhatsApp</div>
+    {% for m in n.members %}
+    {% set ch = m.channel %}
+    <div class="member">
+      <div class="member-head">
+        <div><b>#{{ m.tenant.id }} · {{ m.tenant.name }}</b>
+          {% if m.tenant.parent_tenant_id %}<span class="balance-sub">— филиал; без своего номера шлёт с номера головного</span>{% endif %}
+        </div>
+        <div>
+          {% if ch and ch.api_key_enc and ch.enabled and not ch.last_error %}
+            <span class="badge b-ok">подключён{% if ch.display_phone %} · {{ ch.display_phone }}{% endif %}</span>
+          {% elif ch and ch.last_error %}
+            <span class="badge b-bad">ошибка</span>
+          {% elif ch and not ch.enabled %}
+            <span class="badge b-none">выключен</span>
+          {% else %}
+            <span class="badge b-none">не подключён</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if ch and ch.last_error %}<div class="hint" style="color:#f87171;margin-bottom:.6rem">{{ ch.last_error }}</div>{% endif %}
+      <form method="post" action="/superadmin/wa-official/{{ m.tenant.id }}/channel" class="grid g4">
+        <div><label>Провайдер</label>
+          <select name="provider">
+            <option value="360dialog" {% if not ch or ch.provider == '360dialog' %}selected{% endif %}>360dialog</option>
+            <option value="meta" {% if ch and ch.provider == 'meta' %}selected{% endif %}>Meta Cloud API</option>
+          </select>
+        </div>
+        <div><label>API-ключ {{ '(оставьте пустым, чтобы не менять)' if ch and ch.api_key_enc else '' }}</label><input type="password" name="api_key" autocomplete="off"></div>
+        <div><label>Номер (для отображения)</label><input type="text" name="display_phone" value="{{ ch.display_phone if ch and ch.display_phone else '' }}" placeholder="+7 700 000 00 00"></div>
+        <div><label>Имя в WhatsApp</label><input type="text" name="display_name" value="{{ ch.display_name if ch and ch.display_name else '' }}"></div>
+        <div><label>phone_number_id (только Meta)</label><input type="text" name="phone_number_id" value="{{ ch.phone_number_id if ch and ch.phone_number_id else '' }}"></div>
+        <div><label>waba_id (только Meta)</label><input type="text" name="waba_id" value="{{ ch.waba_id if ch and ch.waba_id else '' }}"></div>
+        <div><label>Статус</label>
+          <select name="enabled">
+            <option value="1" {% if not ch or ch.enabled %}selected{% endif %}>Включён</option>
+            <option value="0" {% if ch and not ch.enabled %}selected{% endif %}>Выключен</option>
+          </select>
+        </div>
+        <div class="row-end"><button class="btn btn-primary" type="submit" style="width:100%;justify-content:center"><i class="bi bi-plug"></i> Сохранить и проверить</button></div>
+      </form>
+      {% if m.webhook %}<div class="hint">Вебхук статусов: <code>{{ m.webhook }}</code>{% if ch.provider == 'meta' %} — для Meta укажите его в приложении, verify token = часть после /wa-webhook/{% endif %}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card">Нет аккаунтов.</div>
+  {% endfor %}
+</main>
+</body>
+</html>

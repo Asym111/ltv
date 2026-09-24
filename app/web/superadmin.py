@@ -449,3 +449,138 @@ def sa_exit_impersonate(request: Request):
                 request.session.pop(k, None)
 
     return RedirectResponse(url="/superadmin", status_code=303)
+
+
+# ── Официальный WhatsApp и кредиты рассылок ───────────────────
+
+@router.get("/wa-official", response_class=HTMLResponse)
+def sa_wa_official_page(request: Request, msg: str = "", err: str = ""):
+    redir = _require_auth(request)
+    if redir:
+        return redir
+
+    from app.models.wa_official import WaOfficialChannel
+    from app.services import wa_credits
+    from app.services.wa_official import webhook_url_for
+
+    db = SessionLocal()
+    try:
+        tenants = db.query(Tenant).order_by(Tenant.id.asc()).all()
+        channels = {c.tenant_id: c for c in db.query(WaOfficialChannel).all()}
+        by_parent: dict = {}
+        for t in tenants:
+            if t.parent_tenant_id:
+                by_parent.setdefault(int(t.parent_tenant_id), []).append(t)
+
+        networks = []
+        for t in tenants:
+            if t.parent_tenant_id:
+                continue
+            members = [t] + by_parent.get(int(t.id), [])
+            networks.append({
+                "root": t,
+                "balance": wa_credits.get_balance(db, t.id),
+                "ledger": wa_credits.ledger(db, t.id, limit=8),
+                "members": [
+                    {
+                        "tenant": m,
+                        "channel": channels.get(int(m.id)),
+                        "webhook": webhook_url_for(channels[int(m.id)]) if channels.get(int(m.id)) else None,
+                    }
+                    for m in members
+                ],
+            })
+
+        return templates.TemplateResponse("superadmin/wa_official.html", {
+            "request": request,
+            "networks": networks,
+            "msg": msg,
+            "err": err,
+            "public_base": (os.getenv("PUBLIC_BASE_URL", "") or "").rstrip("/"),
+        })
+    finally:
+        db.close()
+
+
+@router.post("/wa-official/{network_id}/topup")
+def sa_wa_topup(
+    request: Request,
+    network_id: int,
+    credits: int = Form(...),
+    amount_kzt: str = Form(""),
+    comment: str = Form(""),
+):
+    redir = _require_auth(request)
+    if redir:
+        return redir
+    from urllib.parse import quote
+    from app.services import wa_credits
+
+    db = SessionLocal()
+    try:
+        t = db.get(Tenant, int(network_id))
+        if not t or t.parent_tenant_id:
+            return RedirectResponse(url="/superadmin/wa-official?err=" + quote("Кредиты пополняются только на головной аккаунт сети"), status_code=303)
+        kzt = int(amount_kzt) if str(amount_kzt).strip().isdigit() else None
+        kind = "topup" if int(credits) > 0 else "adjust"
+        try:
+            bal = wa_credits.topup(db, t.id, int(credits), comment=comment, amount_kzt=kzt,
+                                   created_by="superadmin", kind=kind)
+        except wa_credits.InsufficientCredits as e:
+            return RedirectResponse(url="/superadmin/wa-official?err=" + quote(str(e)), status_code=303)
+        return RedirectResponse(
+            url="/superadmin/wa-official?msg=" + quote(f"{t.name}: {'+' if int(credits) > 0 else ''}{int(credits)} кредитов, баланс {bal}"),
+            status_code=303,
+        )
+    finally:
+        db.close()
+
+
+@router.post("/wa-official/{tenant_id}/channel")
+def sa_wa_channel(
+    request: Request,
+    tenant_id: int,
+    provider: str = Form("360dialog"),
+    api_key: str = Form(""),
+    phone_number_id: str = Form(""),
+    waba_id: str = Form(""),
+    display_phone: str = Form(""),
+    display_name: str = Form(""),
+    enabled: str = Form("1"),
+):
+    redir = _require_auth(request)
+    if redir:
+        return redir
+    from urllib.parse import quote
+    from app.services.wa_official import upsert_channel, set_webhook, webhook_url_for, list_templates
+
+    db = SessionLocal()
+    try:
+        t = db.get(Tenant, int(tenant_id))
+        if not t:
+            return RedirectResponse(url="/superadmin/wa-official", status_code=303)
+        ch = upsert_channel(db, t.id, provider, api_key, phone_number_id, waba_id,
+                            display_phone, display_name, enabled == "1")
+
+        notes = []
+        # Проверяем ключ запросом шаблонов
+        res = list_templates(ch, approved_only=False)
+        if res.get("ok"):
+            notes.append(f"ключ рабочий, шаблонов: {len(res.get('templates') or [])}")
+            ch.last_error = None
+        else:
+            ch.last_error = res.get("error")
+            notes.append(f"ошибка ключа: {res.get('error')}")
+
+        url = webhook_url_for(ch)
+        if url and ch.provider == "360dialog" and res.get("ok"):
+            w = set_webhook(ch, url)
+            notes.append("вебхук статусов установлен" if w.get("ok") else f"вебхук не установлен: {w.get('error')}")
+        elif not url:
+            notes.append("PUBLIC_BASE_URL не задан — вебхук статусов не установлен")
+        db.commit()
+
+        key = "msg" if res.get("ok") else "err"
+        return RedirectResponse(url=f"/superadmin/wa-official?{key}=" + quote(f"{t.name}: " + "; ".join(notes)), status_code=303)
+    finally:
+        db.close()

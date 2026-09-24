@@ -25,7 +25,7 @@ from app.core.tenant_utils import must_network_id, get_tenant_ids_for_user
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
-from app.schemas.transaction import TransactionCreate, TransactionOut, TransactionRefund
+from app.schemas.transaction import TransactionCreate, TransactionOut, TransactionRefund, RedeemPreviewOut
 
 from app.services.loyalty_engine import (
     get_settings,
@@ -74,6 +74,46 @@ def require_role(request: Request, *allowed: str):
     return u
 
 
+@router.get("/redeem-preview", response_model=RedeemPreviewOut)
+def redeem_preview(
+    request: Request,
+    phone: str = Query(..., min_length=5),
+    amount: int = Query(default=0, ge=0, description="Сумма чека"),
+    paid_amount: Optional[int] = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Максимум к списанию на этот чек: min(активные бонусы, redeem_max_percent% от оплаты)."""
+    tenant_id = must_tenant_id(request)
+    network_id = must_network_id(request)
+    require_role(request, *TRANSACTION_ROLES)
+    settings = get_settings(db, tenant_id=tenant_id)
+
+    pct = int(getattr(settings, "redeem_max_percent", 0) or 0)
+    paid = int(paid_amount if paid_amount is not None else amount)
+    cap = redeem_cap(paid, settings)
+
+    p_hash = hashlib.sha256(normalize_phone(phone).encode()).hexdigest()
+    user = (
+        db.query(User)
+        .filter(User.tenant_id == network_id)
+        .filter(User.phone_hash == p_hash)
+        .first()
+    )
+    if not user:
+        return RedeemPreviewOut(found=False, redeem_max_percent=pct, cap=cap)
+
+    balances = get_balances(db, user_id=user.id)
+    available = int(balances.get("available") or 0)
+    return RedeemPreviewOut(
+        found=True,
+        available=available,
+        pending=int(balances.get("pending") or 0),
+        redeem_max_percent=pct,
+        cap=cap,
+        max_redeem=max(0, min(available, cap)),
+    )
+
+
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
     tenant_id = must_tenant_id(request)          # филиал, где проходит продажа
@@ -118,6 +158,9 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 
     cap = redeem_cap(paid_amount, settings)
     requested = int(payload.redeem_points or 0)
+    if payload.redeem_all:
+        # «Списать максимум»: всё доступное, но не больше % из настроек
+        requested = min(active_balance, cap)
 
     redeem_target = clamp(requested, 0, min(active_balance, cap))
     redeemed = consume_available(db, user_id=user.id, to_spend=redeem_target)
@@ -176,31 +219,22 @@ def create_transaction(payload: TransactionCreate, request: Request, db: Session
 
     db.commit()
 
-    # --- WhatsApp уведомление о списании ---
-    if redeemed > 0 and user.phone:
+    # --- WhatsApp: ОДНО сообщение-чек (списание + начисление) через серый номер ---
+    # Уходит в очередь: кассир не ждёт, номер не шлёт два сообщения подряд.
+    if (redeemed > 0 or earned > 0) and user.phone:
         try:
-            from app.services.whatsapp import send_message
-            from app.services.broadcast_worker import log_wa_message
-            phone_for_wa = decrypt_field(user.phone) or user.phone
-            msg = f"Списано {redeemed} бонусов. Баланс: {int(balances2['total'])}."
-            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
-            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
-                           status="sent" if res.get("ok") else "failed",
-                           text=msg, user_id=user.id, error=res.get("error"))
-        except Exception:
-            pass
-
-    # --- WhatsApp уведомление о начислении ---
-    if earned > 0 and user.phone:
-        try:
-            from app.services.whatsapp import send_message
-            from app.services.broadcast_worker import log_wa_message
-            phone_for_wa = decrypt_field(user.phone) or user.phone
-            msg = f"Вам начислено {earned} бонусов! Баланс: {int(balances2['total'])}. Спасибо за покупку!"
-            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
-            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
-                           status="sent" if res.get("ok") else "failed",
-                           text=msg, user_id=user.id, error=res.get("error"))
+            from app.services.notify_queue import enqueue_notification, PRIORITY_TRANSACTIONAL
+            parts = []
+            if redeemed > 0:
+                parts.append(f"списано {redeemed} бонусов")
+            if earned > 0:
+                parts.append(f"начислено {earned} бонусов")
+            head = "Спасибо за покупку! " if earned > 0 else ""
+            msg = f"{head}По вашей покупке {', '.join(parts)}. Баланс: {int(balances2['total'])}."
+            enqueue_notification(
+                db, tenant_id=tenant_id, phone=decrypt_field(user.phone) or user.phone,
+                text_=msg, user_id=user.id, priority=PRIORITY_TRANSACTIONAL,
+            )
         except Exception:
             pass
 
@@ -326,18 +360,18 @@ def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request,
     out = TransactionOut.model_validate(tx)
     out.user_phone = decrypt_field(user.phone) or user.phone
 
-    # --- WhatsApp уведомление о возврате ---
+    # --- WhatsApp уведомление о возврате (очередь, серый номер) ---
     if user.phone:
         try:
-            from app.services.whatsapp import send_message
-            from app.services.broadcast_worker import log_wa_message
-            balances2 = get_balances(db, user_id=user.id)
-            phone_for_wa = decrypt_field(user.phone) or user.phone
-            msg = f"Возврат на {refund_amount}₸. Бонусов возвращено: {redeem_return}. Баланс: {int(balances2['total'])}."
-            res = send_message(phone_for_wa, msg, tenant_id=str(tenant_id))
-            log_wa_message(db, tenant_id=tenant_id, phone=phone_for_wa, kind="auto",
-                           status="sent" if res.get("ok") else "failed",
-                           text=msg, user_id=user.id, error=res.get("error"))
+            from app.services.notify_queue import enqueue_notification, PRIORITY_TRANSACTIONAL
+            msg = (
+                f"Оформлен возврат на {refund_amount}₸. "
+                f"Бонусов возвращено: {redeem_return}. Баланс: {int(balances_after['total'])}."
+            )
+            enqueue_notification(
+                db, tenant_id=tenant_id, phone=decrypt_field(user.phone) or user.phone,
+                text_=msg, user_id=user.id, priority=PRIORITY_TRANSACTIONAL,
+            )
         except Exception:
             pass
 

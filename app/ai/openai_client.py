@@ -78,13 +78,17 @@ async def openai_generate_json(
     *,
     api_key: str | None,
     model: str | None,
-    timeout_s: int = 40,
+    timeout_s: int = 90,
 ) -> dict[str, Any]:
     key = (api_key or "").strip()
     if not key:
         raise OpenAIError("OPENAI_API_KEY is missing")
 
     m = (model or "").strip() or "gpt-4o-mini"
+    # Рассуждающие модели (o-серия, gpt-5*) не принимают temperature —
+    # раньше из-за этого запрос падал и AI уходил в «эвристику».
+    reasoning = m.startswith(("o1", "o3", "o4", "gpt-5"))
+    temp_kw = {} if reasoning else {"temperature": 0.25}
 
     client = AsyncOpenAI(
         api_key=key,
@@ -108,8 +112,9 @@ async def openai_generate_json(
                     "strict": True,
                 }
             },
-            temperature=0.25,
-            max_output_tokens=2000,  # было 900 — AI обрезал длинные аналитические ответы
+            **temp_kw,
+            # с запасом: у рассуждающих моделей в лимит входят и «мысли»
+            max_output_tokens=6000 if reasoning else 2000,
         )
         text = (getattr(resp, "output_text", None) or "").strip()
         if text:
@@ -135,8 +140,8 @@ async def openai_generate_json(
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_prompt},
             ],
-            temperature=0.25,
-            max_tokens=2000,
+            **temp_kw,
+            **({"max_completion_tokens": 6000} if reasoning else {"max_tokens": 2000}),
             response_format={"type": "json_object"},
         )
         text = (chat_resp.choices[0].message.content or "").strip()

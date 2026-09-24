@@ -130,9 +130,16 @@
           </div>
 
           <div class="col-12 col-md-4">
-            <label class="form-label">Списать</label>
+            <div class="d-flex justify-content-between align-items-center">
+              <label class="form-label mb-1">Списать</label>
+              <div class="form-check form-switch mb-1">
+                <input class="form-check-input" type="checkbox" id="txRedeemAll">
+                <label class="form-check-label small" for="txRedeemAll">Списать максимум</label>
+              </div>
+            </div>
             <input class="form-control" id="txRedeem" type="number" min="0" step="1" value="0">
             <div class="small text-muted mt-1" id="txRedeemHint">Доступно: —</div>
+            <div class="small text-muted" id="txRedeemCapHint"></div>
           </div>
 
           <div class="col-12 col-md-4">
@@ -253,6 +260,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const txUserPhone = document.getElementById('txUserPhone');
   const txClientMeta = document.getElementById('txClientMeta');
   const txRedeemHint = document.getElementById('txRedeemHint');
+  const txRedeemAll = document.getElementById('txRedeemAll');
+  const txRedeemInput = document.getElementById('txRedeem');
+  const txAmountInput = document.getElementById('txAmount');
+  const txRedeemCapHint = document.getElementById('txRedeemCapHint');
 
   const txRefundModal = new bootstrap.Modal(document.getElementById('txRefundModal'));
   const txRefundTitle = document.getElementById('txRefundTitle');
@@ -461,6 +472,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // «Списать максимум»: сервер считает min(активные бонусы, % из настроек от суммы чека)
+  let redeemPreviewSeq = 0;
+  async function refreshRedeemPreview() {
+    const phone = (txUserPhone.value || '').trim();
+    const amount = Number(txAmountInput.value || 0);
+    txRedeemCapHint.textContent = '';
+    if (!phone || amount <= 0) {
+      if (txRedeemAll.checked) txRedeemInput.value = 0;
+      return null;
+    }
+    const seq = ++redeemPreviewSeq;
+    try {
+      const qs = new URLSearchParams({ phone, amount: String(amount) });
+      const p = await apiGetJson(`/api/transactions/redeem-preview?${qs.toString()}`);
+      if (seq !== redeemPreviewSeq) return null; // пришёл устаревший ответ
+      if (p.found) {
+        txRedeemCapHint.textContent =
+          `Лимит ${p.redeem_max_percent}% от чека = ${p.cap} · можно списать: ${p.max_redeem}`;
+      } else {
+        txRedeemCapHint.textContent = `Лимит ${p.redeem_max_percent}% от чека = ${p.cap}`;
+      }
+      if (txRedeemAll.checked) txRedeemInput.value = p.max_redeem || 0;
+      return p;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applyRedeemAllState() {
+    txRedeemInput.readOnly = txRedeemAll.checked;
+    if (!txRedeemAll.checked) return;
+    refreshRedeemPreview();
+  }
+
+  txRedeemAll.addEventListener('change', applyRedeemAllState);
+  txAmountInput.addEventListener('input', () => { refreshRedeemPreview(); });
+
   function parseBirthDate(s) {
     const v = (s || '').trim();
     if (!v) return null;
@@ -508,6 +556,9 @@ document.addEventListener("DOMContentLoaded", () => {
     txCreateError.textContent = '';
     document.getElementById('txAmount').value = 100000;
     document.getElementById('txRedeem').value = 0;
+    txRedeemAll.checked = false;
+    txRedeemInput.readOnly = false;
+    txRedeemCapHint.textContent = '';
     document.getElementById('txPaymentMethod').value = 'CASH';
     document.getElementById('txComment').value = '';
     txUserPhone.value = (txPhoneInput.value || '').trim();
@@ -516,11 +567,13 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('txTier').value = '';
 
     await loadClientMeta(txUserPhone.value);
+    await refreshRedeemPreview();
     txCreateModal.show();
   });
 
   txUserPhone.addEventListener('blur', async () => {
     await loadClientMeta(txUserPhone.value);
+    await refreshRedeemPreview();
   });
 
   txCreateSubmit.addEventListener('click', async () => {
@@ -532,6 +585,7 @@ document.addEventListener("DOMContentLoaded", () => {
         user_phone: txUserPhone.value.trim(),
         amount: Number(document.getElementById('txAmount').value || 0),
         redeem_points: Number(document.getElementById('txRedeem').value || 0),
+        redeem_all: txRedeemAll.checked,
         payment_method: document.getElementById('txPaymentMethod').value,
         comment: document.getElementById('txComment').value || '',
         full_name: document.getElementById('txFullName').value || null,
@@ -539,7 +593,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tier: document.getElementById('txTier').value || null
       };
 
-      if (payload.redeem_points > 0) {
+      if (payload.redeem_points > 0 && !payload.redeem_all) {
         if (currentClientPending !== null && currentClientAvailable === 0 && currentClientPending > 0) {
           txCreateError.textContent = `Бонусы ещё не активированы. Доступно: 0 (ожидают активации: ${currentClientPending}). Попробуйте позже или уберите списание.`;
           txCreateError.classList.remove('d-none');

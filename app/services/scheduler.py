@@ -13,7 +13,7 @@ from app.core.security import decrypt_field
 from app.models.user import User
 from app.models.bonus_grant import BonusGrant
 from app.models.transaction import Transaction
-from app.services.whatsapp import send_message
+from app.services.notify_queue import enqueue_notification, PRIORITY_REMINDER
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,14 @@ def _log_auto(db, user, phone: str, msg: str, res: dict) -> None:
         )
     except Exception:
         pass
+
+
+def _queue(db, user, phone: str, msg: str) -> None:
+    """Напоминания уходят через очередь серого номера: по одному, днём, с дневным лимитом."""
+    enqueue_notification(
+        db, tenant_id=int(user.tenant_id), phone=phone, text_=msg,
+        user_id=user.id, priority=PRIORITY_REMINDER,
+    )
 
 
 def send_birthday_greetings():
@@ -130,8 +138,7 @@ def send_birthday_greetings():
                     )
                 except (KeyError, IndexError):
                     msg = template
-                res = send_message(phone, msg, tenant_id=str(user.tenant_id))
-                _log_auto(db, user, phone, msg, res)
+                _queue(db, user, phone, msg)
 
             except Exception as e:
                 db.rollback()
@@ -191,13 +198,7 @@ def send_burn_reminders():
                     f"Успейте использовать при следующей покупке!"
                 )
 
-                result = send_message(phone, msg, tenant_id=str(user.tenant_id))
-                _log_auto(db, user, phone, msg, result)
-                if not result.get("ok"):
-                    logger.warning(
-                        f"burn reminder failed user={user_id} tenant={user.tenant_id}: "
-                        f"{result.get('error')}"
-                    )
+                _queue(db, user, phone, msg)
     finally:
         db.close()
 
@@ -270,8 +271,7 @@ def check_tier_downgrade():
                             f"из-за длительного отсутствия покупок. "
                             f"Совершите покупку чтобы вернуть уровень!"
                         )
-                        res = send_message(phone, msg, tenant_id=str(user.tenant_id))
-                        _log_auto(db, user, phone, msg, res)
+                        _queue(db, user, phone, msg)
                     except Exception as e:
                         logger.warning(f"tier downgrade notify failed user={user.id}: {e}")
     except Exception as e:

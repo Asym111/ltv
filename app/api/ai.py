@@ -150,6 +150,8 @@ async def _try_llm(
             api_key=api_key, model=model,
         )
         answer, insights, recos = _validate_llm_shape(obj)
+        if context in ("client", "operator"):
+            recos = _guard_client_recos(payload, recos)
         return "openai", answer, insights, recos
 
     raise OpenAIError(f"Unknown provider: {provider}")
@@ -158,9 +160,12 @@ async def _try_llm(
 # =========================
 # Client payload builder
 # =========================
-def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = None) -> dict[str, Any]:
+def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = None,
+                          branch_id: int | None = None) -> dict[str, Any]:
     """tenant_id здесь — корень сети (клиенты и их история общие на сеть)."""
     import hashlib
+    from app.ai.context import client_context
+
     phone = _norm_phone(raw_phone)
     p_hash = hashlib.sha256(phone.encode()).hexdigest()
     q = db.query(User).filter(User.phone_hash == p_hash)
@@ -170,41 +175,55 @@ def _build_client_payload(db: Session, raw_phone: str, tenant_id: int | None = N
     if not user:
         return {"error": "client_not_found", "phone": phone}
 
-    # История клиента по всей сети (кошелёк общий)
-    txq = db.query(Transaction).filter(Transaction.user_id == user.id)
-    txs = txq.order_by(Transaction.created_at.desc()).limit(50).all()
-
-    total_spent = sum(t.paid_amount for t in txs if t.paid_amount)
-    purchases_count = len(txs)
-    avg_check = round(total_spent / purchases_count, 2) if purchases_count else 0.0
-
-    last_tx = txs[0] if txs else None
-    last_purchase_at = last_tx.created_at.isoformat() if last_tx else None
-    recency_days: int | None = None
-    if last_tx:
-        recency_days = (datetime.utcnow() - last_tx.created_at).days
-
-    balances = get_balances(db, user.id)
-
+    ctx = client_context(db, user, network_id=int(tenant_id or user.tenant_id), tenant_id=branch_id)
     return {
         "phone": phone,
-        "full_name": decrypt_field(user.full_name) if user.full_name else None,
-        "tier": user.tier,
-        "bonus": {
-            "available": balances.get("available", 0),
-            "pending": balances.get("pending", 0),
-        },
-        "total_spent": total_spent,
-        "purchases_count": purchases_count,
-        "avg_check": avg_check,
-        "last_purchase_at": last_purchase_at,
-        "recency_days": recency_days,
+        **ctx,
         "nav_whitelist": {
             "client_card": f"nav:/admin/client/{phone}",
             "transactions": f"nav:/admin/transactions?phone={phone}",
-            "grant_bonus": f"action:grant_bonus|phone={phone}|amount=5000|reason=Подарок от AI",
+            "whatsapp": "nav:/admin/whatsapp",
+            "grant_bonus": f"action:grant_bonus|phone={phone}|amount=N|reason=...",
         },
     }
+
+
+def _guard_client_recos(payload: dict[str, Any], recos: list[AiRecoOut]) -> list[AiRecoOut]:
+    """
+    Жёсткие рамки поверх LLM: подарок не больше 10% среднего чека (и не больше 20 000),
+    и никаких подарков, если клиенту уже дарили за последние 30 дней.
+    """
+    purchases = payload.get("purchases") or {}
+    bonuses = payload.get("bonuses") or {}
+    phone = str(payload.get("phone") or "")
+    avg_check = int(purchases.get("avg_check") or 0)
+    cap = max(500, min(20_000, round(avg_check * 0.10))) if avg_check else 3_000
+    gifted_30d = int(bonuses.get("gifted_last_30d") or 0)
+
+    out: list[AiRecoOut] = []
+    for r in recos:
+        t = r.target or ""
+        if t.startswith("action:grant_bonus"):
+            parts = t.split("|")
+            params = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
+            try:
+                amount = int(params.get("amount") or 0)
+            except Exception:
+                amount = 0
+            if gifted_30d > 0:
+                r.target = f"nav:/admin/client/{phone}"
+                r.suggested_bonus = 0
+                r.risk = f"Подарок не предлагаем: за 30 дней клиенту уже начислено {gifted_30d} бонусов"
+                out.append(r)
+                continue
+            if amount > cap:
+                amount = cap
+            params["amount"] = str(max(0, amount))
+            params.setdefault("phone", phone)
+            r.target = "action:grant_bonus|" + "|".join(f"{k}={v}" for k, v in params.items())
+            r.suggested_bonus = amount
+        out.append(r)
+    return out
 
 
 # =========================
@@ -216,12 +235,17 @@ def _heuristic_answer(context: str, payload: dict[str, Any], question: str) -> A
 
     if context in ("client", "operator"):
         phone = str(payload.get("phone") or "")
-        purchases = int(payload.get("purchases_count") or 0)
-        total = int(payload.get("total_spent") or 0)
-        tier = payload.get("tier") or "Bronze"
-        avail = int((payload.get("bonus") or {}).get("available") or 0)
-        pending = int((payload.get("bonus") or {}).get("pending") or 0)
-        recency_days = payload.get("recency_days")
+        pur = payload.get("purchases") or {}
+        bon = payload.get("bonuses") or {}
+        purchases = int(pur.get("count") or 0)
+        total = int(pur.get("total_spent_net") or 0)
+        tier = (payload.get("client") or {}).get("tier") or "Bronze"
+        avail = int(bon.get("available") or 0)
+        pending = int(bon.get("pending") or 0)
+        recency_days = pur.get("recency_days")
+        expiring = int(bon.get("expiring_30d") or 0)
+        if expiring > 0:
+            insights.append(f"Сгорит в ближайшие 30 дней: {expiring} бонусов (до {bon.get('nearest_expiry')}).")
 
         insights.append(f"Уровень клиента: {tier}. Покупок: {purchases}. Сумма: {total} ₸.")
         insights.append(f"Бонусы: доступно {avail}, в ожидании {pending}.")
@@ -233,6 +257,16 @@ def _heuristic_answer(context: str, payload: dict[str, Any], question: str) -> A
                 why="Нет покупок — стимулируем первый визит бонусами",
                 suggested_bonus=1000,
                 expected_effect="Рост вероятности первой покупки",
+                risk="Минимальный",
+            ))
+        elif isinstance(recency_days, int) and recency_days >= 30 and avail >= int(bon.get("max_redeem_on_avg_check") or 1):
+            # Бонусов и так больше, чем клиент потратит за покупку — дарить незачем, напомним о балансе
+            recos.append(AiRecoOut(
+                action=f"Напомнить клиенту о {avail} бонусах на балансе",
+                target=f"nav:/admin/client/{phone}",
+                why=f"Не покупал {recency_days} дней, при этом на балансе {avail} бонусов — подарок не нужен",
+                suggested_bonus=0,
+                expected_effect="Возврат клиента без затрат на новые бонусы",
                 risk="Минимальный",
             ))
         elif isinstance(recency_days, int) and recency_days >= 30:
@@ -314,6 +348,19 @@ def _heuristic_answer(context: str, payload: dict[str, Any], question: str) -> A
     )
 
 
+def _attach_business_extras(db: Session, request: Request | None, payload: dict[str, Any], network_id: int | None) -> None:
+    """Экономика бонусов, филиалы, повторные покупки, ценные клиенты под риском."""
+    if not network_id:
+        return
+    try:
+        from app.ai.context import business_extras
+        from app.core.tenant_utils import get_tenant_ids_for_user
+        tenant_ids = get_tenant_ids_for_user(request, db) if request is not None else [network_id]
+        payload["extras"] = business_extras(db, int(network_id), tenant_ids)
+    except Exception as e:
+        payload["extras_error"] = str(e)
+
+
 # =========================
 # Endpoints: overview + ask
 # =========================
@@ -326,6 +373,7 @@ async def ai_overview(request: Request, db: Session = Depends(get_db)) -> AiAskO
     network_id = current_user.get("network_id") or tenant_id
     network_id = int(network_id) if network_id else None
     payload = build_overview_payload(db, tenant_id=tenant_id, client_tenant_id=network_id)
+    _attach_business_extras(db, request, payload, network_id)
     question = (
         "Дай краткий обзор бизнеса: что хорошо, что требует внимания, "
         "топ-3 приоритета для роста LTV."
@@ -382,10 +430,11 @@ async def ai_ask(payload_in: AiAskIn, request: Request, db: Session = Depends(ge
 
     if context == "business":
         payload = build_overview_payload(db, tenant_id=tenant_id, client_tenant_id=network_id)
+        _attach_business_extras(db, request, payload, network_id)
     else:
         if not payload_in.phone:
             raise HTTPException(status_code=400, detail="phone required for client context")
-        payload = _build_client_payload(db, payload_in.phone, tenant_id=network_id)
+        payload = _build_client_payload(db, payload_in.phone, tenant_id=network_id, branch_id=tenant_id)
 
     last_err: str | None = None
     for prov in _provider_order():

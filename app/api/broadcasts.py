@@ -58,14 +58,29 @@ class AudienceIn(BaseModel):
 
 class BroadcastCreateIn(AudienceIn):
     name: Optional[str] = Field(default=None, max_length=200)
-    message_template: str = Field(..., min_length=1, max_length=4096)
-    speed: str = Field(default="safe")
-    daily_cap: int = Field(default=250, ge=10, le=1000)
+    # Официальный WhatsApp: одобренный Meta шаблон + значения его переменных
+    template_name: str = Field(..., min_length=1, max_length=512)
+    template_lang: str = Field(default="ru", max_length=16)
+    template_body: str = Field(default="", max_length=4096)
+    # Значение для каждой переменной шаблона {{1}}, {{2}}…: текст с {имя} {бонусы} {уровень}
+    template_params: List[str] = Field(default_factory=list)
+    template_param_names: List[str] = Field(default_factory=list)
+    # Лимит Meta на число получателей в сутки зависит от уровня номера (250 → 2 000 → 10 000 → …)
+    daily_cap: int = Field(default=1000, ge=10, le=100000)
 
 
 class TestSendIn(BaseModel):
     phone: str = Field(..., min_length=5, max_length=20)
-    message_template: str = Field(..., min_length=1, max_length=4096)
+    template_name: str = Field(..., min_length=1, max_length=512)
+    template_lang: str = Field(default="ru", max_length=16)
+    template_body: str = Field(default="", max_length=4096)
+    template_params: List[str] = Field(default_factory=list)
+    template_param_names: List[str] = Field(default_factory=list)
+
+
+# Официальный API не банит за темп — пауза нужна только чтобы не упереться
+# в лимит пропускной способности и равномерно тратить кредиты.
+OFFICIAL_SPEED = {"delay_min_sec": 1, "delay_max_sec": 2, "batch_size": 0, "batch_pause_sec": 0}
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -87,6 +102,9 @@ def _broadcast_out(b: Broadcast, extra: Dict[str, Any] | None = None) -> Dict[st
         "audience_kind": b.audience_kind,
         "audience_params": b.audience_json or {},
         "message_template": b.message_template,
+        "channel": b.channel or "gray",
+        "template_name": b.wa_template_name,
+        "template_lang": b.wa_template_lang,
         "total": int(b.total or 0),
         "sent": int(b.sent or 0),
         "failed": int(b.failed or 0),
@@ -178,21 +196,30 @@ def create_broadcast(payload: BroadcastCreateIn, request: Request, db: Session =
     if payload.audience_kind not in AUDIENCE_KINDS:
         raise HTTPException(status_code=400, detail=f"Неизвестный тип аудитории: {payload.audience_kind}")
 
-    speed = SPEED_PRESETS.get(payload.speed, SPEED_PRESETS["safe"])
+    import json as _json
     name = (payload.name or "").strip() or f"Рассылка от {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    body = (payload.template_body or "").strip() or f"[шаблон {payload.template_name}]"
 
     b = Broadcast(
         tenant_id=tenant_id,
         network_id=network_id,
         name=name,
-        message_template=payload.message_template,
+        message_template=body,
+        channel="official",
+        wa_template_name=payload.template_name.strip(),
+        wa_template_lang=(payload.template_lang or "ru").strip(),
+        wa_template_params=_json.dumps({
+            "params": payload.template_params,
+            "names": payload.template_param_names,
+            "body": body,
+        }, ensure_ascii=False),
         audience_kind=payload.audience_kind,
         audience_json=payload.audience_params or {},
         exclude_recent_days=payload.exclude_recent_days,
         status="draft",
         daily_cap=payload.daily_cap,
         created_by=(u or {}).get("id"),
-        **speed,
+        **OFFICIAL_SPEED,
     )
     db.add(b)
     db.commit()
@@ -220,12 +247,18 @@ def start_broadcast_core(db: Session, b: Broadcast) -> Dict[str, Any]:
             detail=f"У этого филиала уже идёт рассылка «{running.name}». Дождитесь завершения или поставьте её на паузу.",
         )
 
-    wa = get_status(tenant_id=str(b.tenant_id))
-    if not (wa.get("ok") or wa.get("connected")):
+    if (b.channel or "gray") != "official":
         raise HTTPException(
             status_code=400,
-            detail="WhatsApp этого филиала не подключён. Откройте вкладку «Подключение» и отсканируйте QR-код.",
+            detail="Рассылки через WhatsApp по QR отключены, чтобы номер не блокировали. "
+                   "Создайте новую рассылку — она уйдёт через официальный WhatsApp.",
         )
+
+    from app.services.wa_official import get_channel, _ready
+    from app.services import wa_credits
+    ch_err = _ready(get_channel(db, b.tenant_id, b.network_id))
+    if ch_err:
+        raise HTTPException(status_code=400, detail=ch_err)
 
     tenant_ids = network_tenant_ids(db, b.network_id)
     try:
@@ -243,6 +276,14 @@ def start_broadcast_core(db: Session, b: Broadcast) -> Dict[str, Any]:
     if not recipients:
         raise HTTPException(status_code=400, detail="В аудитории нет получателей — рассылку не запускаем.")
 
+    balance = wa_credits.get_balance(db, b.network_id)
+    if balance < len(recipients):
+        raise HTTPException(
+            status_code=402,
+            detail=f"Недостаточно кредитов: нужно {len(recipients)}, на балансе {balance}. "
+                   f"Пополните баланс или сузьте аудиторию.",
+        )
+
     # Чистим возможный старый снапшот (повторный запуск после cancel)
     db.query(WaMessage).filter(
         WaMessage.broadcast_id == b.id,
@@ -258,6 +299,7 @@ def start_broadcast_core(db: Session, b: Broadcast) -> Dict[str, Any]:
             display_name=r["name"],
             kind="broadcast",
             status="pending",
+            channel="official",
         ))
 
     already_processed = int(b.sent or 0) + int(b.failed or 0) + int(b.skipped or 0)
@@ -269,7 +311,11 @@ def start_broadcast_core(db: Session, b: Broadcast) -> Dict[str, Any]:
     db.commit()
 
     start_broadcast_worker()  # на случай если воркер ещё не поднят
-    return _broadcast_out(b, {"queued": len(recipients), "excluded": res["excluded"]})
+    return _broadcast_out(b, {
+        "queued": len(recipients),
+        "excluded": res["excluded"],
+        "credits_balance": balance,
+    })
 
 
 @router.post("/{broadcast_id}/start")
@@ -298,6 +344,11 @@ def resume_broadcast(broadcast_id: int, request: Request, db: Session = Depends(
     b = _get_own_broadcast(db, broadcast_id, must_network_id(request))
     if b.status != "paused":
         raise HTTPException(status_code=400, detail="Рассылка не на паузе")
+    if (b.channel or "gray") != "official":
+        raise HTTPException(status_code=400, detail="Эту рассылку (через QR-номер) продолжить нельзя — создайте новую.")
+    from app.services import wa_credits
+    if wa_credits.get_balance(db, b.network_id) <= 0:
+        raise HTTPException(status_code=402, detail="На балансе нет кредитов. Пополните баланс, чтобы продолжить.")
     b.status = "running"
     b.consecutive_failures = 0
     b.last_error = None
@@ -364,22 +415,40 @@ def test_send(payload: TestSendIn, request: Request, db: Session = Depends(get_d
     except Exception:
         pass
 
-    # spin в том же порядке, что и в воркере, — тест должен показывать
-    # ровно то, что получит клиент, а не сырые [[а|б]].
-    text = spin(render_message(payload.message_template, variables))
-    result = send_message(payload.phone, text, tenant_id=str(tenant_id))
-    log_wa_message(
-        db,
-        tenant_id=tenant_id,
-        phone=normalize_phone(payload.phone),
-        kind="single",
-        status="sent" if result.get("ok") else "failed",
-        text=text,
-        error=result.get("error"),
+    from app.services import wa_credits
+    from app.services.wa_official import get_channel, send_template, render_params
+
+    variables["first_name"] = str(variables.get("name") or "").split()[0] if variables.get("name") else "Клиент"
+    params = render_params(payload.template_params, variables)
+    text = payload.template_body or f"[шаблон {payload.template_name}]"
+    for i, pname in enumerate(payload.template_param_names):
+        if i < len(params):
+            text = text.replace("{{" + str(pname) + "}}", params[i])
+
+    if not wa_credits.charge(db, network_id, 1):
+        db.rollback()
+        raise HTTPException(status_code=402, detail="На балансе нет кредитов для тестового сообщения.")
+    db.commit()
+
+    result = send_template(get_channel(db, tenant_id, network_id), phone_clean,
+                           payload.template_name, payload.template_lang, params,
+                           payload.template_param_names)
+    if not result.get("ok"):
+        wa_credits.refund(db, network_id, 1)
+        db.commit()
+    row = WaMessage(
+        broadcast_id=None, tenant_id=tenant_id, phone=phone_clean, kind="single",
+        text=text, status="sent" if result.get("ok") else "failed",
+        error=(str(result.get("error"))[:490] if not result.get("ok") else None),
+        sent_at=datetime.utcnow() if result.get("ok") else None,
+        channel="official", provider_message_id=result.get("message_id"),
+        credits_charged=1 if result.get("ok") else 0,
     )
+    db.add(row)
+    db.commit()
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "Ошибка отправки")
-    return {"ok": True, "text": text}
+    return {"ok": True, "text": text, "credits_balance": wa_credits.get_balance(db, network_id)}
 
 
 @router.get("")

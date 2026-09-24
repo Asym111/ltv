@@ -30,7 +30,7 @@ function initWhatsappPage() {
       const st = await apiGet("/api/whatsapp/status");
       const ok = !!(st.ok || st.connected);
       badge.className = `badge ${ok ? "text-bg-success" : "text-bg-danger"}`;
-      badge.textContent = ok ? "WhatsApp подключён" : "WhatsApp не подключён";
+      badge.textContent = ok ? "QR-номер (уведомления) подключён" : "QR-номер (уведомления) не подключён";
       const logoutBtn = $("waLogoutBtn");
       if (logoutBtn) logoutBtn.classList.toggle("d-none", !ok);
       if (ok && $("waQrBox")) {
@@ -251,10 +251,81 @@ function initWhatsappPage() {
   });
 
   // ═══════════════════════════════════════════════════
-  // Сообщение: переменные, шаблоны, предпросмотр, тест
+  // Официальный WhatsApp: шаблоны Meta, переменные, предпросмотр, тест, кредиты
   // ═══════════════════════════════════════════════════
+  const OFF = "/api/whatsapp/official";
+  let ofTemplates = [];         // одобренные шаблоны
+  let ofSelected = null;        // выбранный шаблон
+  let ofCredits = null;         // баланс кредитов
+  let lastParamInput = null;    // куда вставлять переменную
+
+  const TIER_RU_MAP = { Bronze: "Бронза", Silver: "Серебро", Gold: "Золото" };
+  const esc = (v) => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function renderLocal(template, vars) {
+    let t = String(template || "");
+    const map = {
+      "имя": vars.name, "name": vars.name,
+      "бонусы": vars.bonus, "бонус": vars.bonus, "bonus": vars.bonus,
+      "уровень": vars.tier, "tier": vars.tier,
+      "телефон": vars.phone, "phone": vars.phone,
+    };
+    for (const [k, v] of Object.entries(map)) {
+      t = t.split("{" + k + "}").join(String(v ?? ""));
+    }
+    return t;
+  }
+
+  // Разумные значения по умолчанию для переменных шаблона
+  function defaultParam(i, name) {
+    const n = String(name || "").toLowerCase();
+    if (n.includes("name") || n.includes("имя")) return "{имя}";
+    if (n.includes("bonus") || n.includes("бонус") || n.includes("balance")) return "{бонусы}";
+    if (n.includes("tier") || n.includes("level")) return "{уровень}";
+    return i === 0 ? "{имя}" : i === 1 ? "{бонусы}" : "";
+  }
+
+  function paramInputs() {
+    return Array.from(document.querySelectorAll("#ofParamsBox input[data-param]"));
+  }
+
+  function currentParams() {
+    return paramInputs().map(i => i.value);
+  }
+
+  function renderParams() {
+    const box = $("ofParamsBox");
+    const bodyBox = $("ofTemplateBody");
+    if (!box) return;
+    if (!ofSelected) {
+      box.innerHTML = "";
+      bodyBox?.classList.add("d-none");
+      $("ofVarsBar")?.classList.add("d-none");
+      renderPreview();
+      return;
+    }
+    if (bodyBox) {
+      bodyBox.textContent = ofSelected.body || "";
+      bodyBox.classList.remove("d-none");
+    }
+    const params = ofSelected.params || [];
+    box.innerHTML = params.map((p, i) => `
+      <div class="of-param">
+        <label>Переменная {{${esc(p)}}}</label>
+        <input type="text" class="settings-input" data-param="${i}" value="${esc(defaultParam(i, p))}"
+               placeholder="Текст или {имя} / {бонусы} / {уровень}">
+      </div>`).join("") || '<div class="text-muted small">В этом шаблоне нет переменных.</div>';
+    $("ofVarsBar")?.classList.toggle("d-none", !params.length);
+    paramInputs().forEach(inp => {
+      inp.addEventListener("focus", () => { lastParamInput = inp; });
+      inp.addEventListener("input", onMessageChange);
+    });
+    lastParamInput = paramInputs()[0] || null;
+    onMessageChange();
+  }
+
   function insertVar(text) {
-    const ta = $("bcMessage");
+    const ta = lastParamInput;
     if (!ta) return;
     const start = ta.selectionStart ?? ta.value.length;
     const end = ta.selectionEnd ?? ta.value.length;
@@ -268,81 +339,62 @@ function initWhatsappPage() {
     btn.addEventListener("click", () => insertVar(btn.dataset.var));
   });
 
-  // Зеркало spin() из broadcast_worker.py: [[а|б|в]] → один случайный вариант.
-  const SPIN_RE = /\[\[([^\[\]]+)\]\]/g;
-
-  function spinLocal(text) {
-    return String(text || "").replace(SPIN_RE, (_, body) => {
-      const opts = body.split("|").map(o => o.trim()).filter(Boolean);
-      return opts.length ? opts[Math.floor(Math.random() * opts.length)] : "";
+  function filledBody(vars) {
+    if (!ofSelected) return "";
+    let body = String(ofSelected.body || "");
+    (ofSelected.params || []).forEach((p, i) => {
+      const val = renderLocal(currentParams()[i] || "", vars).trim() || "-";
+      body = body.split("{{" + p + "}}").join(val);
     });
+    return body;
   }
-
-  // Сколько разных писем даёт шаблон: произведение числа вариантов в блоках.
-  function spinVariants(text) {
-    let total = 1;
-    for (const m of String(text || "").matchAll(SPIN_RE)) {
-      const n = m[1].split("|").map(o => o.trim()).filter(Boolean).length;
-      if (n > 1) total *= n;
-    }
-    return total;
-  }
-
-  function renderLocal(template, vars) {
-    let t = String(template || "");
-    const map = {
-      "имя": vars.name, "name": vars.name,
-      "бонусы": vars.bonus, "бонус": vars.bonus, "bonus": vars.bonus,
-      "уровень": vars.tier, "tier": vars.tier,
-      "телефон": vars.phone, "phone": vars.phone,
-    };
-    for (const [k, v] of Object.entries(map)) {
-      t = t.split("{" + k + "}").join(String(v ?? ""));
-    }
-    // Порядок как в воркере: сначала переменные, потом выбор варианта
-    return spinLocal(t);
-  }
-
-  const TIER_RU_MAP = { Bronze: "Бронза", Silver: "Серебро", Gold: "Золото" };
 
   function renderPreview() {
     const box = $("bcPreviewBox");
     if (!box) return;
-    const msg = ($("bcMessage")?.value || "").trim();
-    if (!msg) {
-      box.innerHTML = '<div class="text-muted small">Напишите текст сообщения</div>';
+    if (!ofSelected) {
+      box.innerHTML = '<div class="text-muted small">Выберите шаблон</div>';
       return;
     }
     const sample = (lastEstimate?.sample || [])[0];
     const vars = sample
       ? { name: sample.name || "Клиент", bonus: sample.bonus ?? 0, tier: TIER_RU_MAP[sample.tier] || sample.tier || "", phone: sample.phone || "" }
       : { name: "Айгуль", bonus: 3000, tier: "Золото", phone: "77001234567" };
-    box.textContent = renderLocal(msg, vars);
+    box.textContent = filledBody(vars);
   }
 
   function onMessageChange() {
-    const msg = $("bcMessage")?.value || "";
-    if ($("bcCharCount")) {
-      const v = spinVariants(msg);
-      $("bcCharCount").textContent = v > 1
-        ? `${msg.length} · ${v} ${plural(v, "вариант", "варианта", "вариантов")} письма`
-        : String(msg.length);
-    }
+    // скрытое поле — чтобы сводка «видела», что сообщение готово
+    if ($("bcMessage")) $("bcMessage").value = ofSelected ? (ofSelected.body || ofSelected.name) : "";
     renderPreview();
     renderSummary();
   }
-  $("bcMessage")?.addEventListener("input", onMessageChange);
-  $("bcRerollBtn")?.addEventListener("click", renderPreview);
+
+  $("ofTemplate")?.addEventListener("change", (e) => {
+    const i = e.target.value;
+    ofSelected = i === "" ? null : ofTemplates[parseInt(i, 10)];
+    renderParams();
+  });
+
+  function templatePayload() {
+    return {
+      template_name: ofSelected.name,
+      template_lang: ofSelected.language || "ru",
+      template_body: ofSelected.body || "",
+      template_params: currentParams(),
+      template_param_names: ofSelected.params || [],
+    };
+  }
 
   $("bcTestBtn")?.addEventListener("click", async () => {
     const phone = ($("bcTestPhone")?.value || "").trim();
-    const msg = ($("bcMessage")?.value || "").trim();
     if (!phone) { uiToast("Укажите номер для теста", "warning"); return; }
-    if (!msg) { uiToast("Напишите текст сообщения", "warning"); return; }
+    if (!ofSelected) { uiToast("Выберите шаблон", "warning"); return; }
     const btn = $("bcTestBtn"); btn.disabled = true;
     try {
-      await apiPost(`${API}/test-send`, { phone, message_template: msg });
+      const r = await apiPost(`${API}/test-send`, { phone, ...templatePayload() });
       uiToast("Тестовое сообщение отправлено", "success");
+      if (r && r.credits_balance !== undefined) setCredits(r.credits_balance);
     } catch (e) {
       uiToast(`Ошибка теста: ${e.message}`, "error");
     } finally {
@@ -350,130 +402,112 @@ function initWhatsappPage() {
     }
   });
 
-  // ── Шаблоны ────────────────────────────────────────
-  async function loadTemplates() {
-    try {
-      const data = await apiGet("/api/whatsapp/templates");
-      templatesCache = data.templates || [];
-      const sel = $("bcTemplateSelect");
-      if (sel) {
-        sel.innerHTML = '<option value="">Вставить шаблон…</option>' +
-          templatesCache.map((t, i) =>
-            `<option value="${i}">${t.custom ? "★ " : ""}${t.title}</option>`).join("");
-      }
-      renderTemplatesTab();
-    } catch (_) {}
+  function setCredits(n) {
+    ofCredits = Number(n || 0);
+    const txt = ofCredits.toLocaleString("ru-RU");
+    if ($("ofCredits")) $("ofCredits").textContent = txt;
+    if ($("ofCredits2")) $("ofCredits2").textContent = txt;
+    renderSummary();
   }
 
-  $("bcTemplateSelect")?.addEventListener("change", (e) => {
-    const idx = e.target.value;
-    if (idx === "") return;
-    const t = templatesCache[parseInt(idx, 10)];
-    if (t && $("bcMessage")) {
-      $("bcMessage").value = t.text;
-      onMessageChange();
-    }
-    e.target.value = "";
-  });
-
-  $("bcSaveTplBtn")?.addEventListener("click", async () => {
-    const text = ($("bcMessage")?.value || "").trim();
-    if (!text) { uiToast("Сначала напишите текст", "warning"); return; }
-    const title = prompt("Название шаблона:", "Мой шаблон");
-    if (!title) return;
+  async function loadOfficial() {
     try {
-      await apiPost("/api/whatsapp/templates", { title, text });
-      uiToast("Шаблон сохранён", "success");
-      loadTemplates();
+      const st = await apiGet(`${OFF}/status`);
+      setCredits(st.credits);
+      const ch = st.channel || {};
+      const info = $("ofChannelInfo");
+      if (info) {
+        if (!ch.configured) info.innerHTML = '<span class="text-danger">Официальный номер не подключён — обратитесь к администратору платформы</span>';
+        else if (!ch.enabled) info.innerHTML = '<span class="text-danger">Официальный номер отключён</span>';
+        else info.textContent = `Номер: ${ch.display_phone || "подключён"}${ch.display_name ? " · " + ch.display_name : ""}`;
+      }
+      if (!ch.configured || !ch.enabled) {
+        if ($("ofTemplate")) $("ofTemplate").innerHTML = '<option value="">Нет подключённого номера</option>';
+        if ($("tplList")) $("tplList").innerHTML = '<div class="text-muted small">Официальный номер не подключён.</div>';
+        return;
+      }
     } catch (e) {
-      uiToast(`Ошибка: ${e.message}`, "error");
+      if ($("ofChannelInfo")) $("ofChannelInfo").textContent = `Ошибка: ${e.message}`;
+      return;
     }
-  });
+    await loadTemplates();
+  }
+
+  async function loadTemplates() {
+    try {
+      const data = await apiGet(`${OFF}/templates`);
+      ofTemplates = data.templates || [];
+      const sel = $("ofTemplate");
+      if (sel) {
+        sel.innerHTML = '<option value="">— выберите шаблон —</option>' +
+          ofTemplates.map((t, i) =>
+            `<option value="${i}">${esc(t.name)} · ${esc(t.language)}${t.category === "MARKETING" ? "" : " · " + esc(t.category)}</option>`).join("");
+        if (!ofTemplates.length) sel.innerHTML = '<option value="">Нет одобренных шаблонов</option>';
+      }
+      renderTemplatesTab();
+    } catch (e) {
+      if ($("ofTemplate")) $("ofTemplate").innerHTML = `<option value="">Ошибка: ${esc(e.message)}</option>`;
+    }
+  }
 
   function renderTemplatesTab() {
     const box = $("tplList");
     if (!box) return;
-    if (!templatesCache.length) {
-      box.innerHTML = '<div class="text-muted small">Шаблонов нет</div>';
+    if (!ofTemplates.length) {
+      box.innerHTML = '<div class="text-muted small">Одобренных шаблонов пока нет</div>';
       return;
     }
-    box.innerHTML = templatesCache.map((t, i) => `
+    box.innerHTML = ofTemplates.map((t, i) => `
       <div class="wa-bc-item">
         <div class="d-flex align-items-center justify-content-between">
-          <b>${t.custom ? "★ " : ""}${t.title}</b>
-          <div class="d-flex gap-1">
-            <button class="btn btn-sm btn-outline-primary" data-tpl-use="${i}" title="Использовать">
-              <i class="bi bi-box-arrow-in-down"></i>
-            </button>
-            ${t.custom ? `<button class="btn btn-sm btn-outline-danger" data-tpl-del="${t.id}" title="Удалить">
-              <i class="bi bi-trash"></i></button>` : ""}
-          </div>
+          <div><b>${esc(t.name)}</b> <span class="badge text-bg-light">${esc(t.language)}</span>
+            <span class="badge text-bg-secondary">${esc(t.category)}</span></div>
+          <button class="btn btn-sm btn-outline-primary" data-tpl-use="${i}" title="Использовать в рассылке">
+            <i class="bi bi-box-arrow-in-down"></i>
+          </button>
         </div>
-        <div class="text-muted small mt-1" style="white-space:pre-wrap">${t.text}</div>
+        <div class="text-muted small mt-1" style="white-space:pre-wrap">${esc(t.body)}</div>
       </div>
     `).join("");
-
     box.querySelectorAll("[data-tpl-use]").forEach(b => b.addEventListener("click", () => {
-      const t = templatesCache[parseInt(b.dataset.tplUse, 10)];
-      if (t && $("bcMessage")) {
-        $("bcMessage").value = t.text;
-        onMessageChange();
-        document.querySelector('[data-bs-target="#waTabNew"]')?.click();
-        uiToast("Шаблон вставлен в рассылку", "success");
-      }
-    }));
-    box.querySelectorAll("[data-tpl-del]").forEach(b => b.addEventListener("click", async () => {
-      if (!confirm("Удалить шаблон?")) return;
-      try {
-        await apiDelete(`/api/whatsapp/templates/${b.dataset.tplDel}`);
-        uiToast("Шаблон удалён", "success");
-        loadTemplates();
-      } catch (e) { uiToast(`Ошибка: ${e.message}`, "error"); }
+      const sel = $("ofTemplate");
+      if (sel) { sel.value = b.dataset.tplUse; sel.dispatchEvent(new Event("change")); }
+      document.querySelector('[data-bs-target="#waTabNew"]')?.click();
     }));
   }
 
-  $("tplCreateBtn")?.addEventListener("click", async () => {
-    const title = ($("tplTitle")?.value || "").trim();
-    const text = ($("tplText")?.value || "").trim();
-    if (!title || !text) { uiToast("Заполните название и текст", "warning"); return; }
+  const LEDGER_KIND = { topup: "Пополнение", charge: "Рассылка", refund: "Возврат", adjust: "Корректировка" };
+  async function loadLedger() {
+    const box = $("ofLedger");
+    if (!box) return;
     try {
-      await apiPost("/api/whatsapp/templates", { title, text });
-      $("tplTitle").value = ""; $("tplText").value = "";
-      uiToast("Шаблон сохранён", "success");
-      loadTemplates();
-    } catch (e) { uiToast(`Ошибка: ${e.message}`, "error"); }
-  });
+      const d = await apiGet(`${OFF}/credits`);
+      setCredits(d.balance);
+      const rows = d.ledger || [];
+      box.innerHTML = rows.length ? `<table class="table table-sm mb-0"><thead><tr class="text-muted">
+          <th>Дата</th><th>Операция</th><th class="text-end">Кредиты</th><th class="text-end">Баланс</th></tr></thead><tbody>` +
+        rows.map(r => `<tr>
+          <td>${r.created_at ? new Date(r.created_at + "Z").toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</td>
+          <td>${esc(LEDGER_KIND[r.kind] || r.kind)}${r.comment ? `<div class="text-muted" style="font-size:.72rem">${esc(r.comment)}</div>` : ""}</td>
+          <td class="text-end ${r.delta > 0 ? "text-success" : "text-danger"}">${r.delta > 0 ? "+" : ""}${r.delta}</td>
+          <td class="text-end">${r.balance_after}</td></tr>`).join("") + "</tbody></table>"
+        : '<div class="text-muted">Движений пока нет</div>';
+    } catch (e) {
+      box.innerHTML = `<div class="text-danger">${esc(e.message)}</div>`;
+    }
+  }
+  $("waTemplatesTabBtn")?.addEventListener("click", loadLedger);
 
   // ═══════════════════════════════════════════════════
   // Сводка и запуск
   // ═══════════════════════════════════════════════════
-  // [задержка_мин, задержка_макс, размер_пачки, пауза_между_пачками] — зеркало
-  // SPEED_PRESETS из app/api/broadcasts.py. Расходиться им нельзя.
-  const SPEED_CFG = {
-    safe:   [7, 14, 25, 90],
-    slow:   [12, 20, 20, 120],
-    fast:   [4, 8, 30, 60],
-    turtle: [60, 120, 8, 900],
-  };
-
+  // Официальный канал: пауза ~1–2 сек, без пачек (зеркало OFFICIAL_SPEED в broadcasts.py)
   const SEND_WINDOW_SEC = 12 * 3600;   // окно отправки 09:00–21:00
 
-  function speedCfg() {
-    return SPEED_CFG[$("bcSpeed")?.value || "safe"] || SPEED_CFG.safe;
-  }
+  function perMsgSeconds() { return 1.5; }
 
-  // Средние секунды на сообщение с учётом пауз между пачками
-  function perMsgSeconds() {
-    const c = speedCfg();
-    return (c[0] + c[1]) / 2 + c[3] / c[2];
-  }
-
-  // Сколько сообщений реально уходит за сутки: упирается либо в дневной
-  // лимит, либо в физическую пропускную способность окна 09:00–21:00.
-  // При «Черепахе» потолок окна (~213) ниже любого разумного daily_cap,
-  // поэтому считать по одному daily_cap было бы враньём.
   function dailyThroughput() {
-    const cap = parseInt($("bcDailyCap")?.value || "250", 10) || 250;
+    const cap = parseInt($("bcDailyCap")?.value || "1000", 10) || 1000;
     const windowCap = Math.max(1, Math.floor(SEND_WINDOW_SEC / perMsgSeconds()));
     return Math.min(cap, windowCap);
   }
@@ -508,28 +542,26 @@ function initWhatsappPage() {
     const msg = ($("bcMessage")?.value || "").trim();
     if (!count || !msg) { box.classList.add("d-none"); return; }
 
-    const cfg = speedCfg();
     const perDay = dailyThroughput();
     const days = sendDaysFor(count);
 
-    // Через ночную паузу «закончится к 14:30» стало бы враньём,
-    // поэтому для многодневной отправки показываем дни, а не время.
     const timing = days <= 1
-      ? `<i class="bi bi-clock me-1"></i>Займёт ${fmtEta(estimateEtaSec(count))} — закончится к
-         <b>${new Date(Date.now() + estimateEtaSec(count) * 1000)
-              .toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
-         (если в окне 09:00–21:00)`
+      ? `<i class="bi bi-clock me-1"></i>Займёт ${fmtEta(estimateEtaSec(count))} (в окне 09:00–21:00)`
       : `<i class="bi bi-calendar-range me-1"></i>Займёт <b>${days} ${plural(days, "день", "дня", "дней")}</b>
-         — примерно по ${perDay} ${plural(perDay, "сообщению", "сообщения", "сообщений")} в сутки
-         в окне 09:00–21:00`;
+         — по ${perDay} ${plural(perDay, "сообщению", "сообщения", "сообщений")} в сутки`;
+
+    const enough = ofCredits !== null && ofCredits >= count;
+    const credits = ofCredits === null ? "" : enough
+      ? `<div class="text-success"><i class="bi bi-coin me-1"></i>Спишется до <b>${count}</b> ${plural(count, "кредита", "кредитов", "кредитов")},
+          на балансе ${ofCredits.toLocaleString("ru-RU")}</div>`
+      : `<div class="text-danger"><i class="bi bi-exclamation-octagon me-1"></i>Нужно <b>${count}</b> кредитов,
+          на балансе ${ofCredits.toLocaleString("ru-RU")}. Пополните баланс или сузьте аудиторию.</div>`;
 
     box.classList.remove("d-none");
     box.innerHTML = `
       <div><i class="bi bi-people me-1"></i>Получателей: <b>${count}</b></div>
+      ${credits}
       <div>${timing}</div>
-      <div class="text-muted small mt-1">Задержки случайные ${cfg[0]}–${cfg[1]} сек,
-        каждые ${cfg[2]} ${plural(cfg[2], "сообщение", "сообщения", "сообщений")} —
-        пауза ${Math.round(cfg[3] / 60)} мин.</div>
       ${renderBonusLine()}
     `;
   }
@@ -547,7 +579,6 @@ function initWhatsappPage() {
       Бонусы ещё не начислены — сделайте это в шаге 2, иначе клиенты получат
       сообщение о бонусах с пустым балансом.</div>`;
   }
-  $("bcSpeed")?.addEventListener("change", renderSummary);
 
   function renderWarnings(warnings) {
     const box = $("bcWarnings");
@@ -560,14 +591,17 @@ function initWhatsappPage() {
   $("bcStartBtn")?.addEventListener("click", async () => {
     const errEl = $("bcStartErr");
     errEl?.classList.add("d-none");
-    const msg = ($("bcMessage")?.value || "").trim();
-    if (!msg) { uiToast("Напишите текст сообщения", "warning"); return; }
+    if (!ofSelected) { uiToast("Выберите шаблон сообщения", "warning"); return; }
 
     if (!lastEstimate) await runEstimate();
     const count = lastEstimate?.count || 0;
     if (!count) { uiToast("В аудитории нет получателей", "warning"); return; }
 
-    if (!confirm(`Запустить рассылку на ${count} получателей?\nОтправка пойдёт в фоне с безопасными задержками.`)) return;
+    if (ofCredits !== null && ofCredits < count) {
+      uiToast(`Недостаточно кредитов: нужно ${count}, есть ${ofCredits}`, "error");
+      return;
+    }
+    if (!confirm(`Запустить рассылку на ${count} получателей через официальный WhatsApp?\nСпишется до ${count} кредитов.`)) return;
 
     const btn = $("bcStartBtn");
     btn.disabled = true;
@@ -576,11 +610,11 @@ function initWhatsappPage() {
       const aud = collectAudience();
       const created = await apiPost(API, {
         ...aud,
-        message_template: msg,
-        speed: $("bcSpeed")?.value || "safe",
-        daily_cap: parseInt($("bcDailyCap")?.value || "250", 10) || 250,
+        ...templatePayload(),
+        daily_cap: parseInt($("bcDailyCap")?.value || "1000", 10) || 1000,
       });
-      await apiPost(`${API}/${created.id}/start`, {});
+      const started = await apiPost(`${API}/${created.id}/start`, {});
+      if (started && started.credits_balance !== undefined) setCredits(started.credits_balance);
       uiToast("Рассылка запущена 🚀", "success");
       document.querySelector('[data-bs-target="#waTabHistory"]')?.click();
       loadHistory();
@@ -719,7 +753,6 @@ function initWhatsappPage() {
     }
   }
   $("bcDailyCap")?.addEventListener("input", bbUpdateTtlHint);
-  $("bcSpeed")?.addEventListener("change", bbUpdateTtlHint);
 
   // Любое изменение аудитории или параметров бонуса сбрасывает проверку
   ["bcMinBonus", "bcInactiveDays", "bcInactiveDaysMax", "bcTier", "bcSegment",
@@ -1012,7 +1045,7 @@ function initWhatsappPage() {
   // ═══════════════════════════════════════════════════
   loadStatus();
   loadBranchName();
-  loadTemplates();
+  loadOfficial();
   loadCampaigns();
   loadHistory();
   runEstimate();

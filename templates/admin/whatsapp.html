@@ -31,7 +31,7 @@
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="pill" data-bs-target="#waTabTemplates" type="button" id="waTemplatesTabBtn">
-      <i class="bi bi-chat-square-text me-1"></i> Шаблоны
+      <i class="bi bi-chat-square-text me-1"></i> Шаблоны и кредиты
     </button>
   </li>
   <li class="nav-item" role="presentation">
@@ -239,59 +239,54 @@
         </div>
       </div>
 
-      <!-- Шаг 3: Сообщение -->
+      <!-- Шаг 3: Шаблон официального WhatsApp -->
       <div class="col-12 col-xl-7">
         <div class="card p-3 mb-3">
-          <div class="h6 mb-1"><span class="badge text-bg-dark me-1">3</span> Текст сообщения</div>
-          <div class="text-muted small mb-2">Нажмите на переменную, чтобы вставить её в текст</div>
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-1">
+            <div class="h6 mb-0"><span class="badge text-bg-dark me-1">3</span> Сообщение (официальный WhatsApp)</div>
+            <div class="text-end">
+              <div class="wa-credits"><i class="bi bi-coin me-1"></i><b id="ofCredits">—</b> <span class="text-muted small">кредитов</span></div>
+              <div class="text-muted" style="font-size:.72rem" id="ofChannelInfo">Проверка канала…</div>
+            </div>
+          </div>
+          <div class="text-muted small mb-2">
+            Рассылка уходит с официального номера компании — его не блокируют за массовые отправки.
+            Текст — только одобренный Meta шаблон; 1 сообщение = 1 кредит.
+          </div>
 
-          <div class="d-flex gap-2 mb-2 flex-wrap">
+          <label class="settings-label">Шаблон</label>
+          <select id="ofTemplate" class="settings-select mt-1 mb-2">
+            <option value="">Загрузка шаблонов…</option>
+          </select>
+
+          <div id="ofTemplateBody" class="wa-preview-box mb-2 d-none" style="min-height:0"></div>
+
+          <div id="ofParamsBox" class="d-flex flex-column gap-2"></div>
+          <div id="ofVarsBar" class="d-flex gap-2 mt-2 flex-wrap d-none">
+            <span class="text-muted small align-self-center">Вставить в выбранное поле:</span>
             <button class="btn btn-sm btn-outline-secondary" type="button" data-var="{имя}">{имя}</button>
-            <button class="btn btn-sm btn-outline-success" type="button" data-var="{бонусы}">
-              <i class="bi bi-coin me-1"></i>{бонусы} — баланс клиента
-            </button>
+            <button class="btn btn-sm btn-outline-success" type="button" data-var="{бонусы}"><i class="bi bi-coin me-1"></i>{бонусы}</button>
             <button class="btn btn-sm btn-outline-secondary" type="button" data-var="{уровень}">{уровень}</button>
-            <button class="btn btn-sm btn-outline-primary" type="button"
-                    data-var="[[вариант 1|вариант 2|вариант 3]]"
-                    title="Каждый клиент получит один из вариантов — одинаковые письма подряд выдают бота">
-              <i class="bi bi-shuffle me-1"></i>Вариант текста
-            </button>
-            <select id="bcTemplateSelect" class="form-select form-select-sm ms-auto" style="max-width:220px">
-              <option value="">Вставить шаблон…</option>
-            </select>
           </div>
-
-          <textarea id="bcMessage" class="settings-textarea" rows="5"
-                    placeholder="Например: Привет, {имя}! 🎉 У вас {бонусы} бонусов — приходите, пока не сгорели!"></textarea>
-          <div class="d-flex justify-content-between mt-1">
-            <button class="btn btn-sm btn-link p-0" type="button" id="bcSaveTplBtn">
-              <i class="bi bi-bookmark-plus me-1"></i>Сохранить как шаблон
-            </button>
-            <span id="bcCharCount" class="text-muted" style="font-size:.75rem">0</span>
-          </div>
+          <!-- совместимость со старым кодом сводки -->
+          <textarea id="bcMessage" class="d-none"></textarea>
 
           <div class="row g-2 mt-2">
             <div class="col-12 col-md-6">
-              <div class="d-flex align-items-center justify-content-between">
-                <label class="settings-label mb-0">Предпросмотр (первый получатель)</label>
-                <button class="btn btn-sm btn-link p-0" type="button" id="bcRerollBtn"
-                        title="Показать другой случайный вариант">
-                  <i class="bi bi-shuffle me-1"></i>другой вариант
-                </button>
-              </div>
+              <label class="settings-label mb-0">Предпросмотр (первый получатель)</label>
               <div id="bcPreviewBox" class="wa-preview-box mt-1">
-                <div class="text-muted small">Напишите текст и посчитайте аудиторию</div>
+                <div class="text-muted small">Выберите шаблон</div>
               </div>
             </div>
             <div class="col-12 col-md-6">
-              <label class="settings-label">Тест на свой номер</label>
+              <label class="settings-label">Тест на свой номер (−1 кредит)</label>
               <div class="d-flex gap-2 mt-1">
                 <input type="text" id="bcTestPhone" class="settings-input" placeholder="77001234567">
                 <button class="btn btn-outline-success" type="button" id="bcTestBtn" style="white-space:nowrap">
                   <i class="bi bi-send me-1"></i>Тест
                 </button>
               </div>
-              <div class="text-muted small mt-1">Если номер есть в базе клиентов — подставятся его реальные имя и баланс, иначе примерные значения</div>
+              <div class="text-muted small mt-1">Если номер есть в базе клиентов — подставятся его реальные имя и баланс</div>
             </div>
           </div>
         </div>
@@ -301,18 +296,13 @@
           <div class="h6 mb-2"><span class="badge text-bg-dark me-1">4</span> Проверка и запуск</div>
 
           <div class="row g-2 align-items-end mb-2">
-            <div class="col-12 col-md-5">
-              <label class="settings-label">Скорость отправки</label>
-              <select id="bcSpeed" class="settings-select mt-1">
-                <option value="turtle" selected>🐢 Черепаха — 60–120 сек (номер отваливается)</option>
-                <option value="safe">🛡 Безопасно — 7–14 сек</option>
-                <option value="slow">🐌 Медленно — 12–20 сек (новый номер)</option>
-                <option value="fast">⚡ Быстрее — 4–8 сек (выше риск)</option>
-              </select>
+            <div class="col-6 col-md-5">
+              <label class="settings-label">Лимит получателей в сутки</label>
+              <input type="number" id="bcDailyCap" class="settings-input mt-1" value="1000" min="10" max="100000">
             </div>
-            <div class="col-6 col-md-4">
-              <label class="settings-label">Лимит в день с этого номера</label>
-              <input type="number" id="bcDailyCap" class="settings-input mt-1" value="250" min="10" max="1000">
+            <div class="col-12 col-md-7 text-muted small">
+              Meta ограничивает число новых получателей в сутки уровнем номера (от 250 до безлимита) —
+              ставьте лимит не выше уровня вашего номера.
             </div>
           </div>
 
@@ -324,8 +314,8 @@
             <i class="bi bi-whatsapp me-1"></i> Запустить рассылку
           </button>
           <div class="text-muted small text-center mt-2">
-            Отправка идёт в фоне со случайными паузами, только с 09:00 до 21:00.
-            Можно ставить на паузу и отменять во вкладке «История».
+            Отправка идёт в фоне только с 09:00 до 21:00. Кредиты списываются за каждое отправленное сообщение,
+            за недоставленные — возвращаются. Пауза и отмена — во вкладке «История».
           </div>
         </div>
       </div>
@@ -366,28 +356,29 @@
     </div>
   </div>
 
-  <!-- ════════════ ВКЛАДКА: ШАБЛОНЫ ════════════ -->
+  <!-- ════════════ ВКЛАДКА: ШАБЛОНЫ И КРЕДИТЫ ════════════ -->
   <div class="tab-pane fade" id="waTabTemplates">
     <div class="row g-3">
-      <div class="col-12 col-lg-5">
-        <div class="card p-3">
-          <div class="h6 mb-2">Новый шаблон</div>
-          <label class="settings-label">Название</label>
-          <input type="text" id="tplTitle" class="settings-input mt-1 mb-2" placeholder="Например: Возврат клиентов">
-          <label class="settings-label">Текст</label>
-          <textarea id="tplText" class="settings-textarea mt-1" rows="4"
-                    placeholder="Привет, {имя}! У вас {бонусы} бонусов…"></textarea>
-          <button class="btn btn-success mt-2" type="button" id="tplCreateBtn">
-            <i class="bi bi-plus-lg me-1"></i>Сохранить шаблон
-          </button>
-        </div>
-      </div>
       <div class="col-12 col-lg-7">
         <div class="card p-3">
-          <div class="h6 mb-2">Мои шаблоны и встроенные</div>
+          <div class="h6 mb-1">Одобренные шаблоны официального WhatsApp</div>
+          <div class="text-muted small mb-2">
+            Новый шаблон создаётся и проходит модерацию Meta (обычно от нескольких минут до суток).
+            Чтобы добавить шаблон — пришлите текст администратору платформы. Переменные в тексте: {{1}}, {{2}}…
+          </div>
           <div id="tplList" class="d-flex flex-column gap-2">
             <div class="text-muted small">Загрузка…</div>
           </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-5">
+        <div class="card p-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="h6 mb-0">Кредиты на рассылку</div>
+            <div class="wa-credits"><b id="ofCredits2">—</b></div>
+          </div>
+          <div class="text-muted small mb-2">1 кредит = 1 сообщение. Для пополнения свяжитесь с администратором платформы.</div>
+          <div id="ofLedger" class="small"><div class="text-muted">Загрузка…</div></div>
         </div>
       </div>
     </div>
@@ -404,6 +395,11 @@
           <div class="text-muted small mb-3">
             Номер филиала: <b id="waBranchName">текущий контекст</b>.
             У каждого филиала — свой номер (переключение в шапке сайта).
+          </div>
+          <div class="alert alert-info py-2 small mb-3">
+            <i class="bi bi-shield-check me-1"></i>
+            Этот номер отправляет <b>только уведомления о бонусах</b>: начисление, списание, возврат, день рождения,
+            сгорание. Сообщения уходят по одному с паузами, чтобы номер не блокировали. Рассылки идут через официальный WhatsApp.
           </div>
           <div class="d-flex flex-column gap-3 align-items-center">
             <div id="waQrBox" class="text-center py-2">
@@ -471,6 +467,8 @@
   .wa-summary { border:1px solid var(--border,#e3e8ef); border-radius:10px; padding:10px 12px; font-size:.9rem; }
   .wa-bc-item { border:1px solid var(--border,#e3e8ef); border-radius:10px; padding:10px 12px; }
   .wa-bc-item .progress { height:8px; }
+  .wa-credits { font-size:1.05rem; }
+  .of-param label { font-size:.78rem; color:#6c757d; margin-bottom:2px; }
 </style>
 {% endblock %}
 

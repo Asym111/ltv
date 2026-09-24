@@ -204,6 +204,8 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
             or path.startswith("/dev")
             or path in ("/auth", "/auth/", "/logout", "/logout/", "/health", "/favicon.ico")
             or path.startswith("/superadmin")
+            # Вебхук статусов официального WhatsApp: защищён секретом в URL
+            or path.startswith("/wa-webhook/")
             or (docs_open and (path.startswith("/docs") or path.startswith("/openapi.json") or path.startswith("/redoc")))
         ):
             return await call_next(request)
@@ -405,6 +407,10 @@ def start_broadcast_worker_on_boot():
     from app.services.broadcast_worker import start_broadcast_worker
     start_broadcast_worker()
 
+    # Очередь сервисных уведомлений (чеки, возвраты, ДР, сгорание) — только серый номер
+    from app.services.notify_queue import start_notify_worker
+    start_notify_worker()
+
 
 @app.on_event("startup")
 def bootstrap_owner():
@@ -467,6 +473,10 @@ app.include_router(videos_router, prefix="/api")
 app.include_router(admin_videos_router)
 app.include_router(whatsapp_router, prefix="/api")
 app.include_router(broadcasts_router, prefix="/api")
+
+from app.api.wa_official_api import router as wa_official_router, webhook_router as wa_webhook_router
+app.include_router(wa_official_router, prefix="/api")
+app.include_router(wa_webhook_router)
 app.include_router(superadmin_router)
 
 

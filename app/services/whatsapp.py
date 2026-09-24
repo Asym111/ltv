@@ -132,7 +132,10 @@ def send_message(phone: str, text: str, tenant_id) -> dict:
             url,
             headers=_headers(),
             json={"tenantId": tid, "phone": phone_clean, "message": text},
-            timeout=15,
+            # wa-service ставит сообщения номера в очередь с паузами, поэтому
+            # ответ может прийти не сразу. Короткий таймаут давал «ошибку»
+            # при реально ушедшем сообщении → повтор → дубль клиенту.
+            timeout=120,
         )
         data = r.json()
         if r.status_code == 200 and data.get("success"):

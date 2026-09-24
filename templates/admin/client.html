@@ -160,8 +160,15 @@
         </div>
 
         <div class="col-12 col-md-4">
-          <label class="form-label">Списать бонусов</label>
+          <div class="d-flex justify-content-between align-items-center">
+            <label class="form-label mb-1">Списать бонусов</label>
+            <div class="form-check form-switch mb-1">
+              <input class="form-check-input" type="checkbox" id="fRedeemAll">
+              <label class="form-check-label small" for="fRedeemAll">Списать максимум</label>
+            </div>
+          </div>
           <input class="form-control" type="number" min="0" step="1" id="fRedeem" value="0">
+          <div class="small text-muted mt-1" id="fRedeemHint"></div>
         </div>
 
         <div class="col-12 col-md-4">
