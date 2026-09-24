@@ -170,7 +170,18 @@ def whatsapp_send_campaign(
         )
         return {"campaign_id": payload.campaign_id, "campaign_name": campaign.name, "dry_run": True, **result}
 
-    from app.api.broadcasts import start_broadcast_core
+    # Массовые отправки через QR-номер отключены (номер банят). Рассылка по
+    # кампании создаётся в разделе WhatsApp → Рассылки: официальный канал,
+    # одобренный шаблон, списание кредитов. Аудитория «Кампания» там есть.
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Рассылки теперь идут только через официальный WhatsApp. Откройте WhatsApp → Рассылки, "
+            f"выберите аудиторию «Кампания» (#{campaign.id}) и одобренный шаблон."
+        ),
+    )
+
+    from app.api.broadcasts import start_broadcast_core  # noqa: F401  (старый путь, не используется)
 
     u = getattr(request.state, "user", None) or {}
     b = Broadcast(

@@ -74,18 +74,20 @@ def _in_send_window(now: datetime | None = None) -> bool:
     return QUIET_HOURS_START <= now.hour < QUIET_HOURS_END
 
 
-def _sent_today_count(db: Session, tenant_id: int) -> int:
-    """Сколько сообщений уже отправлено сегодня с номера этого тенанта."""
+def _sent_today_count(db: Session, tenant_id: int, channel: str | None = None) -> int:
+    """Сколько сообщений уже отправлено сегодня с номера этого тенанта (опц. — по каналу)."""
     start = datetime.combine(_now_almaty().date(), datetime.min.time())
-    return int(
+    q = (
         db.query(func.count(WaMessage.id))
         .filter(
             WaMessage.tenant_id == tenant_id,
             WaMessage.status == "sent",
             WaMessage.sent_at >= start,
         )
-        .scalar() or 0
     )
+    if channel:
+        q = q.filter(WaMessage.channel == channel)
+    return int(q.scalar() or 0)
 
 
 # ── Рендер сообщения ──────────────────────────────────────────
@@ -169,6 +171,24 @@ def render_for_user(db: Session, template: str, msg: WaMessage) -> str:
     }))
 
 
+def _user_variables(db: Session, msg: WaMessage) -> dict:
+    """Переменные клиента с ЖИВЫМ балансом на момент отправки."""
+    bonus = 0
+    tier = ""
+    name = msg.display_name or "Клиент"
+    if msg.user_id:
+        try:
+            user = db.get(User, int(msg.user_id))
+            if user is not None:
+                tier = TIER_RU.get(user.tier or "", user.tier or "")
+                balances = get_balances(db, user_id=user.id)
+                bonus = int(balances.get("available") or 0)
+        except Exception as e:
+            logger.warning(f"_user_variables failed user={msg.user_id}: {e}")
+    first = (name or "").split()[0] if name else "Клиент"
+    return {"name": name, "first_name": first, "bonus": bonus, "tier": tier, "phone": msg.phone}
+
+
 # ── Основной цикл ─────────────────────────────────────────────
 
 def _process_one(db: Session, b: Broadcast) -> bool:
@@ -206,6 +226,103 @@ def _process_one(db: Session, b: Broadcast) -> bool:
         except Exception:
             pass
 
+    # Серые массовые рассылки отключены: номер ltv-wa-service используется
+    # только для уведомлений по бонусам, иначе его банят.
+    if (b.channel or "gray") != "official":
+        b.status = "paused"
+        b.last_error = (
+            "Рассылки через подключённый по QR WhatsApp отключены, чтобы номер не блокировали. "
+            "Создайте рассылку заново — она пойдёт через официальный WhatsApp."
+        )
+        db.commit()
+        return False
+
+    return _process_official(db, b, msg)
+
+
+def _process_official(db: Session, b: Broadcast, msg: WaMessage) -> bool:
+    """Отправка одного сообщения рассылки через официальный WhatsApp (шаблон + кредит)."""
+    import json
+    from app.services import wa_credits
+    from app.services.wa_official import get_channel, send_template, render_params
+
+    try:
+        tpl = json.loads(b.wa_template_params or "{}")
+    except Exception:
+        tpl = {}
+    param_tpls = tpl.get("params") or []
+    param_names = tpl.get("names") or []
+
+    variables = _user_variables(db, msg)
+    params = render_params(param_tpls, variables)
+    # Для журнала и тест-просмотра — текст шаблона с подставленными значениями
+    body = str(tpl.get("body") or b.message_template or "")
+    preview = body
+    for i, name in enumerate(param_names):
+        if i < len(params):
+            preview = preview.replace("{{" + str(name) + "}}", params[i])
+
+    # 1 кредит = 1 сообщение. Нет кредитов — пауза, сообщение остаётся в очереди.
+    if not wa_credits.charge(db, b.network_id, 1, broadcast_id=b.id):
+        db.rollback()
+        b.status = "paused"
+        b.last_error = "Закончились кредиты на рассылку. Пополните баланс — рассылка продолжится с того же места."
+        db.commit()
+        return False
+
+    ch = get_channel(db, b.tenant_id, b.network_id)
+    result = send_template(ch, msg.phone, b.wa_template_name or "", b.wa_template_lang or "ru",
+                           params, param_names)
+
+    msg.text = preview
+    msg.channel = "official"
+    if result.get("ok"):
+        msg.status = "sent"
+        msg.sent_at = datetime.utcnow()
+        msg.provider_message_id = result.get("message_id")
+        msg.credits_charged = 1
+        msg.error = None
+        b.sent = int(b.sent or 0) + 1
+        b.consecutive_failures = 0
+        db.commit()
+        return True
+
+    # Не ушло — кредит возвращаем
+    wa_credits.refund(db, b.network_id, 1, broadcast_id=b.id)
+    err = str(result.get("error") or "unknown")[:490]
+
+    if result.get("retryable"):
+        # Лимит скорости/временный сбой: сообщение остаётся pending, ждём
+        msg.error = err
+        b.consecutive_failures = int(b.consecutive_failures or 0) + 1
+        _next_at[b.id] = time.monotonic() + min(600, 30 * b.consecutive_failures)
+        if b.consecutive_failures >= CIRCUIT_BREAKER_FAILS * 2:
+            b.status = "paused"
+            b.last_error = f"WhatsApp временно ограничил отправку. Продолжите позже. Ошибка: {err}"
+        db.commit()
+        return False
+
+    if result.get("fatal"):
+        # Ключ/шаблон/номер: дальше слать бессмысленно
+        msg.error = err
+        b.status = "paused"
+        b.last_error = f"Официальный WhatsApp отклонил отправку: {err}"
+        db.commit()
+        return False
+
+    msg.status = "failed"
+    msg.error = err
+    b.failed = int(b.failed or 0) + 1
+    b.consecutive_failures = int(b.consecutive_failures or 0) + 1
+    if b.consecutive_failures >= CIRCUIT_BREAKER_FAILS * 4:
+        b.status = "paused"
+        b.last_error = f"Много ошибок подряд. Последняя: {err}"
+    db.commit()
+    return True
+
+
+def _legacy_gray_send(db: Session, b: Broadcast, msg: WaMessage) -> bool:
+    """Старая отправка через серый номер. Не вызывается — оставлена для отката."""
     text = render_for_user(db, b.message_template, msg)
 
     result = send_message(msg.phone, text, tenant_id=str(b.tenant_id))
@@ -280,7 +397,7 @@ def _worker_loop() -> None:
                         continue
 
                     # Дневной лимит номера-отправителя
-                    if _sent_today_count(db, b.tenant_id) >= int(b.daily_cap or 250):
+                    if _sent_today_count(db, b.tenant_id, b.channel or "gray") >= int(b.daily_cap or 250):
                         # Лимит достигнут — проверим снова через 10 минут
                         _next_at[b.id] = now_mono + 600
                         if not (b.last_error or "").startswith("Дневной лимит"):

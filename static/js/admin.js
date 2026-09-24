@@ -2012,6 +2012,8 @@ function initClientCard() {
   const fAmount = document.getElementById("fAmount");
   const fPaid = document.getElementById("fPaid");
   const fRedeem = document.getElementById("fRedeem");
+  const fRedeemAll = document.getElementById("fRedeemAll");
+  const fRedeemHint = document.getElementById("fRedeemHint");
   const fMethod = document.getElementById("fMethod");
   const fName = document.getElementById("fName");
   const fBirth = document.getElementById("fBirth");
@@ -2132,6 +2134,37 @@ function initClientCard() {
 
   btnReload?.addEventListener("click", reloadAll);
 
+  // «Списать максимум»: min(активные бонусы, % из настроек от оплаты) — считает сервер
+  let redeemSeq = 0;
+  async function refreshRedeemPreview() {
+    if (!fRedeemHint) return;
+    const amount = Math.trunc(safeNum(fAmount?.value, 0));
+    const paid = fPaid?.value ? Math.trunc(safeNum(fPaid.value, 0)) : null;
+    fRedeemHint.textContent = "";
+    if (!amount || amount <= 0) {
+      if (fRedeemAll?.checked && fRedeem) fRedeem.value = "0";
+      return;
+    }
+    const seq = ++redeemSeq;
+    try {
+      const qs = new URLSearchParams({ phone: String(phone), amount: String(amount) });
+      if (paid && paid > 0) qs.set("paid_amount", String(paid));
+      const p = await apiGet(`/api/transactions/redeem-preview?${qs.toString()}`);
+      if (seq !== redeemSeq) return;
+      fRedeemHint.textContent = p.found
+        ? `Лимит ${p.redeem_max_percent}% от чека = ${fmt0(p.cap)} · можно списать: ${fmt0(p.max_redeem)}`
+        : `Лимит ${p.redeem_max_percent}% от чека = ${fmt0(p.cap)}`;
+      if (fRedeemAll?.checked && fRedeem) fRedeem.value = String(p.max_redeem || 0);
+    } catch (e) { /* подсказка не критична */ }
+  }
+
+  fRedeemAll?.addEventListener("change", () => {
+    if (fRedeem) fRedeem.readOnly = !!fRedeemAll.checked;
+    refreshRedeemPreview();
+  });
+  fAmount?.addEventListener("input", refreshRedeemPreview);
+  fPaid?.addEventListener("input", refreshRedeemPreview);
+
   btnCreateTx?.addEventListener("click", async () => {
     hide(txMsg);
 
@@ -2150,6 +2183,7 @@ function initClientCard() {
       amount,
       paid_amount: paid && paid > 0 ? paid : null,
       redeem_points: redeem >= 0 ? redeem : 0,
+      redeem_all: !!fRedeemAll?.checked,
       payment_method: fMethod?.value || "CASH",
       full_name: (fName?.value || "").trim() || null,
       birth_date: (fBirth?.value || "").trim() || null,
@@ -2161,12 +2195,13 @@ function initClientCard() {
       btnCreateTx.disabled = true;
       const res = await apiPost("/api/transactions/", payload);
 
-      show(txMsg, `✓ Транзакция создана (ID: ${res.id || "—"})`, false);
+      show(txMsg, `✓ Транзакция создана (ID: ${res.id || "—"}) · списано ${fmt0(res.redeem_points || 0)} · начислено ${fmt0(res.earned_points || 0)}`, false);
       txMsg?.classList.remove("d-none");
       if (typeof uiToast === "function") uiToast("Транзакция проведена", "success");
 
       if (fPaid) fPaid.value = "";
-      if (fRedeem) fRedeem.value = "0";
+      if (fRedeem) { fRedeem.value = "0"; fRedeem.readOnly = false; }
+      if (fRedeemAll) fRedeemAll.checked = false;
       if (fName) fName.value = "";
       if (fBirth) fBirth.value = "";
       if (fTier) fTier.value = "";
@@ -2182,7 +2217,7 @@ function initClientCard() {
     }
   });
 
-  reloadAll();
+  reloadAll().then(refreshRedeemPreview);
 }
 
 // =========================
@@ -3534,7 +3569,11 @@ function initWhatsappPageLegacy() {
     if (!campaign_id) { showErr(v("waCampaignErr"), "Выберите кампанию"); return; }
     if (!template)    { showErr(v("waCampaignErr"), "Введите шаблон сообщения"); return; }
 
-    if (!dry_run && !confirm(`Отправить WhatsApp-рассылку по кампании? Это реальная отправка!`)) return;
+    if (!dry_run) {
+      // Реальная отправка — только через официальный WhatsApp (шаблон Meta + кредиты)
+      window.location.href = `/admin/whatsapp?campaign_id=${campaign_id}`;
+      return;
+    }
 
     const btn = dry_run ? v("waDryRunBtn") : v("waSendCampaignBtn");
     if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>`; }

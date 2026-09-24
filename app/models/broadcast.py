@@ -53,6 +53,14 @@ class Broadcast(Base):
     consecutive_failures = Column(Integer, nullable=False, default=0)
     last_error = Column(Text, nullable=True)
 
+    # Канал: official — официальный WhatsApp (шаблоны Meta, кредиты);
+    #        gray — старые рассылки через ltv-wa-service (отключены)
+    channel = Column(String(16), nullable=False, default="official")
+    wa_template_name = Column(String(512), nullable=True)
+    wa_template_lang = Column(String(16), nullable=True)
+    # JSON: {"params": ["{имя}", "{бонусы}"], "names": ["1","2"], "body": "текст шаблона"}
+    wa_template_params = Column(Text, nullable=True)
+
     created_by = Column(Integer, nullable=True)  # AuthUser.id
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     started_at = Column(DateTime, nullable=True)
@@ -81,9 +89,20 @@ class WaMessage(Base):
 
     text = Column(Text, nullable=True)  # финальный отправленный текст
 
-    # pending | sent | failed | skipped
+    # pending | sending | sent | failed | skipped
     status = Column(String(16), nullable=False, default="pending", index=True)
     error = Column(String(500), nullable=True)
+
+    # Очередь сервисных уведомлений (kind="auto"): 0 — чек/возврат, 1 — напоминания
+    priority = Column(Integer, nullable=False, default=1)
+    attempts = Column(Integer, nullable=False, default=0)
+
+    # Канал отправки: gray (ltv-wa-service) | official (WhatsApp Cloud API)
+    channel = Column(String(16), nullable=False, default="gray")
+    # ID сообщения у провайдера (wamid) — для статусов доставки из вебхука
+    provider_message_id = Column(String(128), nullable=True)
+    # Кредиты, списанные за это сообщение (официальная рассылка)
+    credits_charged = Column(Integer, nullable=False, default=0)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     sent_at = Column(DateTime, nullable=True, index=True)

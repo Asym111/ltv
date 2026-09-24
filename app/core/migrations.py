@@ -57,3 +57,32 @@ def run_startup_migrations(engine: Engine) -> None:
                 "CREATE INDEX IF NOT EXISTS ix_bonus_grants_tenant_id ON bonus_grants (tenant_id)"
             ))
             logger.info("[migrate] bonus_grants.tenant_id added + backfilled")
+
+        # --- wa_messages: очередь уведомлений + официальный канал ---
+        for col, ddl in (
+            ("priority", "INTEGER NOT NULL DEFAULT 1"),
+            ("attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("channel", "VARCHAR(16) NOT NULL DEFAULT 'gray'"),
+            ("provider_message_id", "VARCHAR(128)"),
+            ("credits_charged", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if not _has_column(inspector, "wa_messages", col):
+                conn.execute(text(f"ALTER TABLE wa_messages ADD COLUMN {col} {ddl}"))
+                logger.info(f"[migrate] wa_messages.{col} added")
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_wa_messages_provider_id ON wa_messages (provider_message_id)"
+        ))
+
+        # --- broadcasts: канал и шаблон официального WhatsApp ---
+        for col, ddl in (
+            # Существующие рассылки были через серый номер → 'gray'.
+            # Новые получают 'official' из модели.
+            ("channel", "VARCHAR(16) NOT NULL DEFAULT 'gray'"),
+            ("wa_template_name", "VARCHAR(512)"),
+            ("wa_template_lang", "VARCHAR(16)"),
+            ("wa_template_params", "TEXT"),
+        ):
+            if not _has_column(inspector, "broadcasts", col):
+                conn.execute(text(f"ALTER TABLE broadcasts ADD COLUMN {col} {ddl}"))
+                logger.info(f"[migrate] broadcasts.{col} added")
+

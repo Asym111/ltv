@@ -21,6 +21,8 @@ class TransactionCreate(BaseModel):
     paid_amount: Optional[int] = Field(default=None, ge=0)
 
     redeem_points: int = Field(default=0, ge=0, description="Списать бонусов")
+    # Галочка «Списать максимум»: сервер сам спишет min(доступно, % из настроек)
+    redeem_all: bool = Field(default=False, description="Списать максимально разрешённое")
 
     payment_method: PaymentMethod = Field(default="CASH")
     comment: str = Field(default="", max_length=255)
@@ -59,3 +61,13 @@ class TransactionOut(BaseModel):
     refunded_at: Optional[datetime] = None
 
     created_at: datetime
+
+
+class RedeemPreviewOut(BaseModel):
+    """Сколько бонусов можно списать на этот чек — для галочки «Списать максимум»."""
+    found: bool
+    available: int = 0          # активные бонусы клиента
+    pending: int = 0            # ещё не активированные
+    redeem_max_percent: int = 0 # % от чека из настроек
+    cap: int = 0                # лимит по проценту для этой суммы
+    max_redeem: int = 0         # итог: min(available, cap)
