@@ -226,7 +226,7 @@ def super_tenant_overview(
             .scalar() or 0
         )
         revenue = (
-            db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
+            db.query(func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0))
             .filter(Transaction.tenant_id == tid)
             .scalar() or 0
         )

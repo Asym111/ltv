@@ -44,6 +44,8 @@ def update_settings(payload: SettingsUpdate, request: Request, db: Session = Dep
     row = get_or_create_settings(db, tenant_id=tenant_id)
 
     row.bonus_name = payload.bonus_name
+    if "earning_mode" in payload.model_fields_set:
+        row.earning_mode = payload.earning_mode
 
     row.earn_bronze_percent = payload.earn_bronze_percent
     row.earn_silver_percent = payload.earn_silver_percent

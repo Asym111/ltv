@@ -21,6 +21,7 @@ class Settings(Base):
 
     # --- Название бонусов ---
     bonus_name = Column(String(40), default="баллы", nullable=False)
+    earning_mode = Column(String(16), default="automatic", nullable=False)
 
     # --- Earn (%) по тирам ---
     earn_bronze_percent = Column(Integer, default=3, nullable=False)

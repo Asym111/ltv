@@ -24,7 +24,7 @@ def _window_stats(db: Session, since: datetime, now: datetime, tenant_ids: List[
     txs = (
         db.query(
             func.count(Transaction.id).label("tx_count"),
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("revenue"),
+            func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0).label("revenue"),
             func.count(func.distinct(Transaction.user_id)).label("clients"),
         )
         .filter(
@@ -45,7 +45,7 @@ def _daily_revenue(db: Session, since: datetime, now: datetime, tenant_ids: List
     rows = (
         db.query(
             func.date(Transaction.created_at).label("day"),
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("revenue"),
+            func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0).label("revenue"),
             func.count(Transaction.id).label("tx_count"),
         )
         .filter(
@@ -133,7 +133,7 @@ def build_analytics_overview(
         .filter(Transaction.tenant_id.in_(tids)).scalar() or 0
     )
     total_spent = int(
-        db.query(func.coalesce(func.sum(Transaction.paid_amount), 0))
+        db.query(func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0))
         .filter(Transaction.tenant_id.in_(tids)).scalar() or 0
     )
 
@@ -142,7 +142,7 @@ def build_analytics_overview(
         db.query(
             Transaction.user_id.label("uid"),
             func.count(Transaction.id).label("freq"),
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("monetary"),
+            func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0).label("monetary"),
             func.max(Transaction.created_at).label("last_tx"),
         )
         .filter(Transaction.tenant_id.in_(tids), Transaction.created_at >= since_90)
@@ -220,7 +220,7 @@ def list_clients_by_segment(
         db.query(
             Transaction.user_id.label("uid"),
             func.count(Transaction.id).label("freq_90"),
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("rev_90"),
+            func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0).label("rev_90"),
             func.max(Transaction.created_at).label("last_tx"),
         )
         .filter(Transaction.tenant_id.in_(tids), Transaction.created_at >= since_90)
@@ -232,7 +232,7 @@ def list_clients_by_segment(
         db.query(
             Transaction.user_id.label("uid"),
             func.count(Transaction.id).label("total_freq"),
-            func.coalesce(func.sum(Transaction.paid_amount), 0).label("total_rev"),
+            func.coalesce(func.sum(Transaction.paid_amount - Transaction.refunded_amount), 0).label("total_rev"),
         )
         .filter(Transaction.tenant_id.in_(tids))
         .group_by(Transaction.user_id)

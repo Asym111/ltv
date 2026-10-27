@@ -1,39 +1,29 @@
 from __future__ import annotations
 
 import hashlib
-from app.core.security import encrypt_field, decrypt_field
+import logging
+from app.core.security import decrypt_field
 
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
-
-# UTC+5 Алматы
-_ALMATY = timezone(timedelta(hours=5))
-
-
-def _now() -> datetime:
-    """Текущее время Алматы (UTC+5), naive для БД."""
-    return datetime.now(_ALMATY).replace(tzinfo=None)
+from datetime import datetime
 
 
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, select
+from sqlalchemy import desc
 
 from app.core.database import get_db
 from app.core.roles import TRANSACTION_ROLES, CLIENT_ACCESS_ROLES
 from app.core.tenant_utils import must_network_id, get_tenant_ids_for_user
 from app.models.transaction import Transaction
 from app.models.user import User
-from app.models.bonus_grant import BonusGrant
-from app.schemas.transaction import TransactionCreate, TransactionOut, TransactionRefund, RedeemPreviewOut
+from app.models.refund import RefundRecord
+from app.schemas.transaction import TransactionCreate, TransactionOut, TransactionRefund, RedeemPreviewOut, RefundOut
 
 from app.services.loyalty_engine import (
     get_settings,
     get_balances,
     redeem_cap,
-    consume_available,
-    calc_earn,
-    grant_purchase_bonus,
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -54,10 +44,6 @@ def normalize_phone(raw: str) -> str:
     return s
 
 
-def clamp(n: int, lo: int, hi: int) -> int:
-    return max(lo, min(n, hi))
-
-
 def must_tenant_id(request: Request) -> int:
     u = getattr(request.state, "user", None) or {}
     tid = u.get("tenant_id")
@@ -72,6 +58,13 @@ def require_role(request: Request, *allowed: str):
     if role not in allowed:
         raise HTTPException(status_code=403, detail=f"Access denied. Required roles: {allowed}")
     return u
+
+
+@router.get("/earning-options")
+def earning_options(request: Request, db: Session = Depends(get_db)):
+    require_role(request, *TRANSACTION_ROLES)
+    settings = get_settings(db, tenant_id=must_tenant_id(request))
+    return {"earning_mode": settings.earning_mode}
 
 
 @router.get("/redeem-preview", response_model=RedeemPreviewOut)
@@ -100,12 +93,14 @@ def redeem_preview(
         .first()
     )
     if not user:
-        return RedeemPreviewOut(found=False, redeem_max_percent=pct, cap=cap)
+        return RedeemPreviewOut(found=False, redeem_max_percent=pct, cap=cap,
+                                earning_mode=settings.earning_mode)
 
     balances = get_balances(db, user_id=user.id)
     available = int(balances.get("available") or 0)
     return RedeemPreviewOut(
         found=True,
+        earning_mode=settings.earning_mode,
         available=available,
         pending=int(balances.get("pending") or 0),
         redeem_max_percent=pct,
@@ -116,266 +111,69 @@ def redeem_preview(
 
 @router.post("/", response_model=TransactionOut)
 def create_transaction(payload: TransactionCreate, request: Request, db: Session = Depends(get_db)):
-    tenant_id = must_tenant_id(request)          # филиал, где проходит продажа
-    network_id = must_network_id(request)        # клиенты общие на сеть
+    from app.services.transaction_operations import create_purchase
+    tenant_id = must_tenant_id(request)
     require_role(request, *TRANSACTION_ROLES)
-    settings = get_settings(db, tenant_id=tenant_id)
-
-    user_phone = normalize_phone(payload.user_phone)
-
-    phone_hash = hashlib.sha256(user_phone.encode()).hexdigest()
-    user = (
-        db.query(User)
-        .filter(User.tenant_id == network_id)
-        .filter(User.phone_hash == phone_hash)
-        .first()
+    tx, user, balances, created = create_purchase(
+        db, payload, tenant_id, must_network_id(request),
+        request.state.user.get("id"), normalize_phone(payload.user_phone),
     )
-    if not user:
-        user = User(
-            tenant_id=network_id,
-            phone=encrypt_field(user_phone),
-            phone_hash=hashlib.sha256(user_phone.encode()).hexdigest(),
-            full_name=encrypt_field(payload.full_name or ""),
-            birth_date=payload.birth_date,
-            tier=payload.tier or "Bronze",
-            bonus_balance=0,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    else:
-        if payload.full_name:
-            user.full_name = encrypt_field(payload.full_name)
-        if payload.birth_date:
-            user.birth_date = payload.birth_date
-        db.commit()
-
-    paid_amount = payload.paid_amount if payload.paid_amount is not None else payload.amount
-    paid_amount = int(paid_amount or 0)
-
-    balances = get_balances(db, user_id=user.id)
-    active_balance = int(balances["available"])
-
-    cap = redeem_cap(paid_amount, settings)
-    requested = int(payload.redeem_points or 0)
-    if payload.redeem_all:
-        # «Списать максимум»: всё доступное, но не больше % из настроек
-        requested = min(active_balance, cap)
-
-    redeem_target = clamp(requested, 0, min(active_balance, cap))
-    redeemed = consume_available(db, user_id=user.id, to_spend=redeem_target)
-
-    if redeemed > active_balance:
-        redeemed = active_balance
-
-    # Начисляем % от суммы ПОСЛЕ вычета использованных бонусов
-    net_amount = max(0, paid_amount - redeemed)
-    earned = calc_earn(paid_amount=net_amount, tier=user.tier, settings=settings)
-
-    txn = Transaction(
-        tenant_id=tenant_id,
-        user_id=user.id,
-        amount=int(payload.amount or 0),
-        paid_amount=paid_amount,
-        redeem_points=redeemed,
-        earned_points=earned,
-        payment_method=payload.payment_method or "OTHER",
-        comment=payload.comment or "",
-        status="completed",
-        refunded_amount=0,
-        refunded_at=None,
-    )
-    db.add(txn)
-    db.commit()
-    db.refresh(txn)
-
-    grant_purchase_bonus(db, user_id=user.id, earn=earned, settings=settings, txn_id=txn.id, tenant_id=tenant_id)
-
-    balances2 = get_balances(db, user_id=user.id)
-    user.bonus_balance = int(balances2["total"])
-
-    try:
-        tiers_cfg = settings.tiers_json or []
-        if tiers_cfg:
-            from sqlalchemy import func as _func
-            # Тир накопительный по всей сети (кошелёк общий)
-            total_spent = int(
-                db.query(_func.coalesce(_func.sum(Transaction.paid_amount), 0))
-                .filter(Transaction.user_id == user.id)
-                .scalar() or 0
-            )
-            sorted_tiers = sorted(
-                tiers_cfg, key=lambda t: t.get("spend_from", 0), reverse=True
-            )
-            new_tier = "Bronze"
-            for t in sorted_tiers:
-                if total_spent >= t.get("spend_from", 0):
-                    new_tier = t.get("name", "Bronze")
-                    break
-            if user.tier != new_tier:
-                user.tier = new_tier
-    except Exception:
-        pass
-
-    db.commit()
-
-    # --- WhatsApp: ОДНО сообщение-чек (списание + начисление) через серый номер ---
-    # Уходит в очередь: кассир не ждёт, номер не шлёт два сообщения подряд.
-    if (redeemed > 0 or earned > 0) and user.phone:
-        try:
-            from app.services.notify_queue import enqueue_notification, PRIORITY_TRANSACTIONAL
-            parts = []
-            if redeemed > 0:
-                parts.append(f"списано {redeemed} бонусов")
-            if earned > 0:
-                parts.append(f"начислено {earned} бонусов")
-            head = "Спасибо за покупку! " if earned > 0 else ""
-            msg = f"{head}По вашей покупке {', '.join(parts)}. Баланс: {int(balances2['total'])}."
-            enqueue_notification(
-                db, tenant_id=tenant_id, phone=decrypt_field(user.phone) or user.phone,
-                text_=msg, user_id=user.id, priority=PRIORITY_TRANSACTIONAL,
-            )
-        except Exception:
-            pass
-
-    out = TransactionOut.model_validate(txn)
-    out.user_phone = decrypt_field(user.phone) or user.phone
-    return out
+    if created and (tx.redeem_points or tx.earned_points):
+        _notify(db, tx, user, balances, (
+            f"Спасибо за покупку! Списано {tx.redeem_points}, "
+            f"начислено {tx.earned_points} бонусов. Баланс: {balances['total']}."
+        ))
+    return _transaction_out(tx, user)
 
 
 @router.post("/{tx_id}/refund", response_model=TransactionOut)
 def refund_transaction(tx_id: int, payload: TransactionRefund, request: Request, db: Session = Depends(get_db)):
+    from app.services.transaction_operations import refund_purchase
     must_tenant_id(request)
     require_role(request, *CLIENT_ACCESS_ROLES)
-    now = _now()
+    tx, user, balances, record = refund_purchase(
+        db, tx_id, payload, get_tenant_ids_for_user(request, db),
+        must_network_id(request), request.state.user.get("id"),
+    )
+    if record is not None:
+        _notify(db, tx, user, balances, (
+            f"Возврат на {record.amount}₸. Возвращено {record.redeemed_restored}, "
+            f"отменено {record.earned_reversed} бонусов. Баланс: {balances['total']}."
+        ))
+    return _transaction_out(tx, user)
 
-    # Возврат разрешён по любой транзакции в пределах доступных пользователю филиалов,
-    # а не только текущего — иначе продажу из другого филиала вернуть невозможно.
+
+@router.get("/{tx_id}/refunds", response_model=List[RefundOut])
+def refund_history(tx_id: int, request: Request, db: Session = Depends(get_db)):
+    require_role(request, *CLIENT_ACCESS_ROLES)
     allowed_ids = get_tenant_ids_for_user(request, db)
+    tx = db.query(Transaction).join(User).filter(
+        Transaction.id == tx_id, Transaction.tenant_id.in_(allowed_ids),
+        User.tenant_id == must_network_id(request),
+    ).first()
+    if tx is None:
+        raise HTTPException(404, detail="Транзакция не найдена")
+    return db.query(RefundRecord).filter(RefundRecord.transaction_id == tx.id).order_by(RefundRecord.id).all()
 
-    tx = (
-        db.query(Transaction)
-        .filter(Transaction.tenant_id.in_(allowed_ids))
-        .filter(Transaction.id == tx_id)
-        .first()
-    )
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
 
-    # Настройки лояльности берём того филиала, где транзакция была пробита.
-    tenant_id = int(tx.tenant_id)
-    settings = get_settings(db, tenant_id=tenant_id)
-
-    if tx.status == "refunded":
-        raise HTTPException(status_code=400, detail="Transaction already fully refunded")
-
-    if tx.paid_amount <= 0:
-        raise HTTPException(status_code=400, detail="Invalid paid_amount for refund")
-
-    if payload.full_refund:
-        refund_amount = tx.paid_amount - int(tx.refunded_amount or 0)
-    else:
-        if not payload.amount:
-            raise HTTPException(status_code=400, detail="amount is required for partial refund")
-        refund_amount = int(payload.amount)
-
-    refundable_left = tx.paid_amount - int(tx.refunded_amount or 0)
-    refund_amount = clamp(refund_amount, 1, max(0, refundable_left))
-    if refund_amount <= 0:
-        raise HTTPException(status_code=400, detail="Nothing to refund")
-
-    ratio_num = refund_amount
-    ratio_den = tx.paid_amount
-
-    earned_revert = int((tx.earned_points * ratio_num) // ratio_den) if tx.earned_points > 0 else 0
-    redeem_return = int((tx.redeem_points * ratio_num) // ratio_den) if tx.redeem_points > 0 else 0
-
-    user = (
-        db.query(User)
-        .filter(User.tenant_id == must_network_id(request))
-        .filter(User.id == tx.user_id)
-        .first()
-    )
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if redeem_return > 0:
-        available_from = now
-        expires_at = now + timedelta(days=int(settings.burn_days))
-        g = BonusGrant(
-            user_id=user.id,
-            tenant_id=tenant_id,
-            transaction_id=tx.id,
-            amount=redeem_return,
-            remaining=redeem_return,
-            status="available",
-            available_from=available_from,
-            expires_at=expires_at,
-            source="refund_redeem",
-        )
-        db.add(g)
-        db.commit()
-
-    if earned_revert > 0:
-        grant = db.scalar(
-            select(BonusGrant).where(
-                BonusGrant.user_id == user.id,
-                BonusGrant.transaction_id == tx.id,
-                BonusGrant.source == "purchase",
-            )
-        )
-        shortfall = earned_revert
-
-        if grant:
-            take = min(int(grant.remaining or 0), shortfall)
-            grant.remaining = int(grant.remaining or 0) - take
-            shortfall -= take
-            if grant.remaining <= 0:
-                grant.remaining = 0
-                grant.status = "expired"
-            db.commit()
-
-        if shortfall > 0:
-            consume_available(db, user_id=user.id, to_spend=shortfall)
-
-    tx.refunded_amount = int(tx.refunded_amount or 0) + refund_amount
-    tx.refunded_at = now
-    if tx.refunded_amount >= tx.paid_amount:
-        tx.status = "refunded"
-    else:
-        tx.status = "partially_refunded"
-
-    if payload.comment:
-        base = (tx.comment or "").strip()
-        add = f"[REFUND {refund_amount}] {payload.comment}".strip()
-        tx.comment = (base + " " + add).strip() if base else add
-
-    db.commit()
-
-    # Обновляем кэш бонусного баланса после возврата
-    balances_after = get_balances(db, user_id=user.id)
-    user.bonus_balance = int(balances_after["total"])
-    db.commit()
-
+def _transaction_out(tx, user):
     out = TransactionOut.model_validate(tx)
     out.user_phone = decrypt_field(user.phone) or user.phone
-
-    # --- WhatsApp уведомление о возврате (очередь, серый номер) ---
-    if user.phone:
-        try:
-            from app.services.notify_queue import enqueue_notification, PRIORITY_TRANSACTIONAL
-            msg = (
-                f"Оформлен возврат на {refund_amount}₸. "
-                f"Бонусов возвращено: {redeem_return}. Баланс: {int(balances_after['total'])}."
-            )
-            enqueue_notification(
-                db, tenant_id=tenant_id, phone=decrypt_field(user.phone) or user.phone,
-                text_=msg, user_id=user.id, priority=PRIORITY_TRANSACTIONAL,
-            )
-        except Exception:
-            pass
-
     return out
+
+
+def _notify(db, tx, user, balances, message):
+    if not user.phone:
+        return
+    try:
+        from app.services.notify_queue import enqueue_notification, PRIORITY_TRANSACTIONAL
+        enqueue_notification(
+            db, tenant_id=tx.tenant_id, phone=decrypt_field(user.phone) or user.phone,
+            text_=message, user_id=user.id, priority=PRIORITY_TRANSACTIONAL,
+        )
+    except Exception:
+        db.rollback()
+        logging.getLogger(__name__).exception("Transaction notification failed")
 
 
 @router.get("/by-phone/{user_phone}", response_model=List[TransactionOut])

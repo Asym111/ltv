@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
@@ -57,6 +58,7 @@ def get_or_create_settings(db: Session, tenant_id: int | None = None) -> Setting
     row = Settings(
         tenant_id=tenant_id,
         bonus_name=d.get("bonus_name", "баллы"),
+        earning_mode=d.get("earning_mode", "automatic"),
         earn_bronze_percent=d.get("earn_bronze_percent", int(env_settings.BONUS_PERCENT_BRONZE)),
         earn_silver_percent=d.get("earn_silver_percent", int(env_settings.BONUS_PERCENT_SILVER)),
         earn_gold_percent=d.get("earn_gold_percent",   int(env_settings.BONUS_PERCENT_GOLD)),
@@ -103,7 +105,7 @@ def _clamp_int(x: int, lo: int, hi: int) -> int:
     return max(lo, min(int(x), int(hi)))
 
 
-def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = None) -> None:
+def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = None, *, commit: bool = True) -> None:
     """
     1) pending -> available (если available_from <= now)
     2) pending/available -> expired (если expires_at <= now) или remaining <= 0
@@ -143,17 +145,17 @@ def process_bonus_lifecycle(db: Session, user_id: int, now: datetime | None = No
     for g in empty:
         g.status = "expired"
 
-    db.commit()
+    db.commit() if commit else db.flush()
 
 
-def get_balances(db: Session, user_id: int, now: datetime | None = None) -> dict:
+def get_balances(db: Session, user_id: int, now: datetime | None = None, *, commit: bool = True) -> dict:
     """
     Возвращает реальный баланс из BonusGrant (не кэш из User.bonus_balance).
     available — можно списать прямо сейчас
     pending   — начислены но ещё не активированы (activation_days не прошли)
     """
     now = now or _now()
-    process_bonus_lifecycle(db, user_id=user_id, now=now)
+    process_bonus_lifecycle(db, user_id=user_id, now=now, commit=commit)
 
     available = db.scalar(
         select(func.coalesce(func.sum(BonusGrant.remaining), 0)).where(
@@ -179,7 +181,7 @@ def get_balances(db: Session, user_id: int, now: datetime | None = None) -> dict
     }
 
 
-def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | None = None) -> int:
+def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | None = None, *, commit: bool = True) -> int:
     """
     Списывает бонусы из available-грантов.
     Гарантии:
@@ -192,7 +194,7 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
     if to_spend <= 0:
         return 0
 
-    process_bonus_lifecycle(db, user_id=user_id, now=now)
+    process_bonus_lifecycle(db, user_id=user_id, now=now, commit=commit)
 
     # SELECT FOR UPDATE — блокируем строки чтобы исключить race condition
     # при параллельных запросах (PostgreSQL row-level lock)
@@ -206,6 +208,7 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
         )
         .order_by(BonusGrant.expires_at.asc(), BonusGrant.created_at.asc())
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).all()
 
     # Реальный доступный баланс — считаем из заблокированных строк
@@ -228,11 +231,11 @@ def consume_available(db: Session, user_id: int, to_spend: int, now: datetime | 
             g.remaining = 0
             g.status = "expired"
 
-    db.commit()
+    db.commit() if commit else db.flush()
     return int(spent)
 
 
-def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
+def automatic_percent(paid_amount: int, tier: str, settings: Settings) -> int:
     """
     Логика начисления % бонусов:
 
@@ -284,7 +287,27 @@ def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
         else:
             rate = int(settings.earn_bronze_percent)
 
-    return int(paid_amount * rate // 100)
+    return rate
+
+
+def calc_earn(paid_amount: int, tier: str, settings: Settings) -> int:
+    rate = automatic_percent(paid_amount, tier, settings)
+    return max(0, int(paid_amount or 0)) * rate // 100
+
+
+def purchase_earning(base: int, tier: str, settings: Settings, manual_percent: Decimal | None):
+    mode = getattr(settings, "earning_mode", "automatic") or "automatic"
+    if mode == "manual":
+        if manual_percent is None:
+            raise ValueError("Укажите процент начисления бонусов")
+        rate = Decimal(str(manual_percent))
+        if not rate.is_finite() or not 0 <= rate <= 100 or rate * 100 != (rate * 100).to_integral_value():
+            raise ValueError("Процент должен быть от 0 до 100, не более двух знаков после запятой")
+    else:
+        if manual_percent is not None:
+            raise ValueError("Ручной процент выключен в настройках организации")
+        rate = Decimal(automatic_percent(base, tier, settings))
+    return mode, rate, int(Decimal(max(0, base)) * rate / 100)
 
 
 def redeem_cap(paid_amount: int, settings: Settings) -> int:
@@ -303,6 +326,8 @@ def grant_purchase_bonus(
     txn_id: int | None = None,
     now: datetime | None = None,
     tenant_id: int | None = None,
+    *,
+    commit: bool = True,
 ) -> None:
     now = now or _now()
     earn = int(earn or 0)
@@ -330,4 +355,4 @@ def grant_purchase_bonus(
         source="purchase",
     )
     db.add(g)
-    db.commit()
+    db.commit() if commit else db.flush()

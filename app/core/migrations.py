@@ -27,11 +27,39 @@ def _has_column(inspector, table: str, column: str) -> bool:
 
 
 def run_startup_migrations(engine: Engine) -> None:
-    inspector = inspect(engine)
     is_pg = engine.dialect.name == "postgresql"
     false_literal = "false" if is_pg else "0"
 
     with engine.begin() as conn:
+        if is_pg:
+            conn.execute(text("SELECT pg_advisory_xact_lock(216451277)"))
+        inspector = inspect(conn)
+        for table, col, ddl in (
+            ("settings", "earning_mode", "VARCHAR(16) NOT NULL DEFAULT 'automatic'"),
+            ("transactions", "earning_mode", "VARCHAR(16)"),
+            ("transactions", "earn_percent", "NUMERIC(5, 2)"),
+            ("transactions", "earn_base_amount", "INTEGER"),
+            ("transactions", "created_by_id", "INTEGER"),
+            ("transactions", "request_id", "VARCHAR(36)"),
+            ("transactions", "request_fingerprint", "VARCHAR(64)"),
+        ):
+            if not _has_column(inspector, table, col):
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        for col, original in (
+            ("refunded_earned_points", "earned_points"),
+            ("refunded_redeem_points", "redeem_points"),
+        ):
+            if not _has_column(inspector, "transactions", col):
+                conn.execute(text(f"ALTER TABLE transactions ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"))
+                # Legacy refunds have no event journal; establish their cumulative baseline.
+                conn.execute(text(
+                    f"UPDATE transactions SET {col} = CASE WHEN paid_amount > 0 THEN "
+                    f"(CAST({original} AS BIGINT) * refunded_amount) / paid_amount ELSE 0 END"
+                ))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_request "
+            "ON transactions (tenant_id, request_id)"
+        ))
         # --- users.wa_opt_out: отписка клиента от WhatsApp-рассылок ---
         if not _has_column(inspector, "users", "wa_opt_out"):
             conn.execute(text(

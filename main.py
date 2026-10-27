@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, Request
+from sqlalchemy import text
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -129,7 +130,10 @@ app.add_middleware(
 # -------------------------
 # DB init
 # -------------------------
-Base.metadata.create_all(bind=engine)
+with engine.begin() as init_conn:
+    if engine.dialect.name == "postgresql":
+        init_conn.execute(text("SELECT pg_advisory_xact_lock(216451277)"))
+    Base.metadata.create_all(bind=init_conn)
 
 # Лёгкие миграции: добавляют недостающие колонки в существующие таблицы
 from app.core.migrations import run_startup_migrations

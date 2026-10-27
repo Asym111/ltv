@@ -129,6 +129,12 @@
             <input class="form-control" id="txAmount" type="number" min="1" step="1" value="100000">
           </div>
 
+          <div class="col-12 col-md-4 d-none" id="txManualPercentBox">
+            <label class="form-label" for="txManualPercent">Начисление, %</label>
+            <input class="form-control" id="txManualPercent" type="number" min="0" max="100" step="0.01">
+            <div class="small text-muted mt-1" id="txEarnPreview"></div>
+          </div>
+
           <div class="col-12 col-md-4">
             <div class="d-flex justify-content-between align-items-center">
               <label class="form-label mb-1">Списать</label>
@@ -278,13 +284,30 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastFilters = null;   // фильтры последнего поиска
   let loadedCount = 0;      // сколько строк уже показано (для «Показать ещё»)
   let refundTx = null;
+  let refundRequestId = null;
+  let purchaseAttempt = null;
+  let refundAttempt = null;
+  let earningMode = 'automatic';
+  const manualPercent = document.getElementById('txManualPercent');
+
+  function updateEarnPreview() {
+    const match = manualPercent.value.match(/^(\d{1,3})(?:\.(\d{1,2}))?$/);
+    const base = Math.max(0, Number(txAmountInput.value) - Number(txRedeemInput.value));
+    const rate = match ? BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0')) : null;
+    document.getElementById('txEarnPreview').textContent = rate !== null && rate <= 10000n && Number.isSafeInteger(base)
+      ? `База: ${base.toLocaleString('ru-RU')} ₸ · начисление: ${(BigInt(base) * rate / 10000n).toLocaleString('ru-RU')}` : '';
+  }
+  manualPercent.addEventListener('input', updateEarnPreview);
+  txAmountInput.addEventListener('input', updateEarnPreview);
+  txRedeemInput.addEventListener('input', updateEarnPreview);
   let currentClientAvailable = null;
   let currentClientPending = null;
 
   async function apiGetJson(url) {
     const r = await fetch(url, { headers: { 'Accept': 'application/json' }});
-    if (!r.ok) throw new Error(await r.text());
-    return await r.json();
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Некорректные данные запроса');
+    return data;
   }
 
   async function apiPostJson(url, payload) {
@@ -293,8 +316,9 @@ document.addEventListener("DOMContentLoaded", () => {
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': window.__CSRF_TOKEN__ || '' },
       body: JSON.stringify(payload)
     });
-    if (!r.ok) throw new Error(await r.text());
-    return await r.json();
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Проверьте заполненные поля');
+    return data;
   }
 
   function fmtDate(s) {
@@ -316,7 +340,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderTxRows(rows, append) {
     if (!append) txTbody.innerHTML = '';
     for (const t of rows) {
-      const canRefund = (t.status !== 'refunded');
+      const canRefund = t.status !== 'refunded' && ['owner', 'admin', 'manager'].includes(window.__USER_ROLE__);
       const btnRefund = canRefund
         ? `<button class="btn btn-sm btn-outline-danger" data-act="refund" data-id="${t.id}"><i class="bi bi-arrow-counterclockwise me-1"></i>Возврат</button>`
         : `<button class="btn btn-sm btn-outline-danger" disabled><i class="bi bi-arrow-counterclockwise me-1"></i>Возврат</button>`;
@@ -324,7 +348,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const btnCard = `<a class="btn btn-sm btn-outline-secondary" href="/admin/client/${encodeURIComponent(t.user_phone || '')}">Карточка</a>`;
 
       const refundedInfo = (t.refunded_amount && t.refunded_amount > 0)
-        ? `<div class="small text-muted">Возврат: ${t.refunded_amount}</div>`
+        ? `<div class="small text-muted">Возврат: ${t.refunded_amount}<br>Бонусы: отменено ${t.refunded_earned_points || 0}, восстановлено ${t.refunded_redeem_points || 0}</div>`
         : '';
 
       const tr = document.createElement('tr');
@@ -334,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${esc(t.user_phone || '')}</td>
         <td class="text-end">${t.amount}</td>
         <td class="text-end">${t.redeem_points}</td>
-        <td class="text-end">${t.earned_points}</td>
+        <td class="text-end">${t.earned_points}${t.earn_percent != null ? `<div class="small text-muted">${esc(t.earn_percent)}%${t.earning_mode === 'manual' ? ' · вручную' : ''}</div>` : ''}</td>
         <td>${statusBadge(t)}${refundedInfo}</td>
         <td>${esc(t.comment || '')}</td>
         <td class="text-end d-flex gap-2 justify-content-end">
@@ -494,6 +518,7 @@ document.addEventListener("DOMContentLoaded", () => {
         txRedeemCapHint.textContent = `Лимит ${p.redeem_max_percent}% от чека = ${p.cap}`;
       }
       if (txRedeemAll.checked) txRedeemInput.value = p.max_redeem || 0;
+      updateEarnPreview();
       return p;
     } catch (e) {
       return null;
@@ -552,6 +577,17 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   txOpenCreateBtn.addEventListener('click', async () => {
+    try {
+      const options = await apiGetJson('/api/transactions/earning-options');
+      earningMode = options.earning_mode;
+    } catch (e) {
+      window.alert(e.message);
+      return;
+    }
+    document.getElementById('txManualPercentBox').classList.toggle('d-none', earningMode !== 'manual');
+    manualPercent.required = earningMode === 'manual';
+    manualPercent.value = '';
+    purchaseAttempt = null;
     txCreateError.classList.add('d-none');
     txCreateError.textContent = '';
     document.getElementById('txAmount').value = 100000;
@@ -593,6 +629,18 @@ document.addEventListener("DOMContentLoaded", () => {
         tier: document.getElementById('txTier').value || null
       };
 
+      if (earningMode === 'manual') {
+        if (!manualPercent.value.trim() || !manualPercent.checkValidity()) {
+          throw new Error('Укажите процент от 0 до 100, не более двух знаков после запятой');
+        }
+        payload.manual_percent = manualPercent.value;
+      }
+      const fingerprint = JSON.stringify(payload);
+      if (!purchaseAttempt || purchaseAttempt.fingerprint !== fingerprint) {
+        purchaseAttempt = { fingerprint, id: crypto.randomUUID() };
+      }
+      payload.request_id = purchaseAttempt.id;
+
       if (payload.redeem_points > 0 && !payload.redeem_all) {
         if (currentClientPending !== null && currentClientAvailable === 0 && currentClientPending > 0) {
           txCreateError.textContent = `Бонусы ещё не активированы. Доступно: 0 (ожидают активации: ${currentClientPending}). Попробуйте позже или уберите списание.`;
@@ -622,10 +670,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!btn) return;
     const id = Number(btn.getAttribute('data-id'));
     refundTx = id;
+    refundRequestId = crypto.randomUUID();
+    refundAttempt = null;
 
     txRefundError.classList.add('d-none');
     txRefundError.textContent = '';
     txRefundFull.checked = false;
+    txRefundAmount.disabled = false;
     txRefundAmount.value = '';
     txRefundComment.value = '';
 
@@ -649,6 +700,10 @@ document.addEventListener("DOMContentLoaded", () => {
         amount: txRefundFull.checked ? null : Number(txRefundAmount.value || 0),
         comment: txRefundComment.value || ''
       };
+      const fingerprint = JSON.stringify(payload);
+      if (refundAttempt !== fingerprint) refundRequestId = crypto.randomUUID();
+      refundAttempt = fingerprint;
+      payload.request_id = refundRequestId;
       await apiPostJson(`/api/transactions/${refundTx}/refund`, payload);
       txRefundModal.hide();
       await runSearch();

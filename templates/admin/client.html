@@ -155,7 +155,7 @@
         </div>
 
         <div class="col-12 col-md-4">
-          <label class="form-label">Фактически оплачено</label>
+          <label class="form-label">Сумма после скидки, до бонусов</label>
           <input class="form-control" type="number" min="0" step="1" id="fPaid" placeholder="Если пусто — возьмём amount">
         </div>
 
@@ -169,6 +169,11 @@
           </div>
           <input class="form-control" type="number" min="0" step="1" id="fRedeem" value="0">
           <div class="small text-muted mt-1" id="fRedeemHint"></div>
+        </div>
+
+        <div class="col-12 col-md-4 d-none" id="fManualPercentBox">
+          <label class="form-label" for="fManualPercent">Начисление, %</label>
+          <input class="form-control" type="number" min="0" max="100" step="0.01" id="fManualPercent">
         </div>
 
         <div class="col-12 col-md-4">

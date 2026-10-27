@@ -42,6 +42,7 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ltv_test
+          LTV_TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/ltv_test
           ENV: test
         run: |
-          pytest --cov=app --cov-report=term-missing
+          pytest test/ --cov=app --cov-report=term-missing

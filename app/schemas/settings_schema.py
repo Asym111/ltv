@@ -1,7 +1,7 @@
 # app/schemas/settings_schema.py
 from __future__ import annotations
 import json
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
@@ -17,6 +17,7 @@ class SettingsOut(BaseModel):
 
     id: int = 1
     bonus_name: str = "баллы"
+    earning_mode: Literal["automatic", "manual"] = "automatic"
     earn_bronze_percent: int = 3
     earn_silver_percent: int = 5
     earn_gold_percent:   int = 7
@@ -92,6 +93,7 @@ class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     bonus_name: str = Field(default="баллы", max_length=40)
+    earning_mode: Literal["automatic", "manual"] = "automatic"
     earn_bronze_percent: int = Field(default=3, ge=0, le=100)
     earn_silver_percent: int = Field(default=5, ge=0, le=100)
     earn_gold_percent:   int = Field(default=7, ge=0, le=100)

@@ -2019,6 +2019,16 @@ function initClientCard() {
   const fBirth = document.getElementById("fBirth");
   const fTier = document.getElementById("fTier");
   const fComment = document.getElementById("fComment");
+  const fManualPercent = document.getElementById("fManualPercent");
+  let clientEarningMode = null;
+  let clientPurchaseAttempt = null;
+
+  async function loadEarningOptions() {
+    const options = await apiGet("/api/transactions/earning-options");
+    clientEarningMode = options.earning_mode;
+    document.getElementById("fManualPercentBox")?.classList.toggle("d-none", clientEarningMode !== "manual");
+    if (fManualPercent) fManualPercent.required = clientEarningMode === "manual";
+  }
 
   function resetMetrics() {
     if (mFullName) mFullName.textContent = "—";
@@ -2128,6 +2138,8 @@ function initClientCard() {
   }
 
   async function reloadAll() {
+    try { await loadEarningOptions(); }
+    catch (e) { show(txMsg, `Ошибка загрузки режима начисления: ${e.message}`, true); }
     await loadMetrics();
     await loadTransactions();
   }
@@ -2181,7 +2193,7 @@ function initClientCard() {
     const payload = {
       user_phone: phone,
       amount,
-      paid_amount: paid && paid > 0 ? paid : null,
+      paid_amount: paid,
       redeem_points: redeem >= 0 ? redeem : 0,
       redeem_all: !!fRedeemAll?.checked,
       payment_method: fMethod?.value || "CASH",
@@ -2193,7 +2205,21 @@ function initClientCard() {
 
     try {
       btnCreateTx.disabled = true;
+      if (clientEarningMode === null) await loadEarningOptions();
+      if (clientEarningMode === "manual") {
+        if (!fManualPercent?.value.trim() || !fManualPercent.checkValidity()) {
+          throw new Error("Укажите процент от 0 до 100, не более двух знаков после запятой");
+        }
+        payload.manual_percent = fManualPercent.value;
+      }
+      const fingerprint = JSON.stringify(payload);
+      if (!clientPurchaseAttempt || clientPurchaseAttempt.fingerprint !== fingerprint) {
+        clientPurchaseAttempt = { fingerprint, id: crypto.randomUUID() };
+      }
+      payload.request_id = clientPurchaseAttempt.id;
       const res = await apiPost("/api/transactions/", payload);
+      clientPurchaseAttempt = null;
+      if (fManualPercent) fManualPercent.value = "";
 
       show(txMsg, `✓ Транзакция создана (ID: ${res.id || "—"}) · списано ${fmt0(res.redeem_points || 0)} · начислено ${fmt0(res.earned_points || 0)}`, false);
       txMsg?.classList.remove("d-none");
@@ -2514,6 +2540,7 @@ function initSettingsPage() {
   // ── Fill form from API data ────────────────────────
   function fillForm(data) {
     setVal("bonus_name", data.bonus_name ?? "баллы");
+    setVal("earning_mode", data.earning_mode ?? "automatic");
 
     setVal("earn_bronze_percent", data.earn_bronze_percent ?? 3);
     setVal("earn_silver_percent", data.earn_silver_percent ?? 5);
@@ -2597,6 +2624,7 @@ function initSettingsPage() {
 
     return {
       bonus_name: (v("bonus_name")?.value || "баллы").trim(),
+      earning_mode: v("earning_mode")?.value || "automatic",
 
       earn_bronze_percent: getInt("earn_bronze_percent", 3),
       earn_silver_percent: getInt("earn_silver_percent", 5),
