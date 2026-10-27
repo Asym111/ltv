@@ -17,6 +17,7 @@ from app.core.database import Base, get_db
 from app.models.auth import AuthUser, Tenant
 from app.models.bonus_grant import BonusGrant
 from app.models.refund import RefundRecord
+from app.models.integration_key import IntegrationKey
 from app.models.settings_model import Settings
 from app.models.transaction import Transaction
 from app.models.user import User
@@ -28,7 +29,7 @@ from app.services.loyalty_engine import _now, get_balances, consume_available
 @pytest.fixture
 def db():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    tables = [Tenant.__table__, AuthUser.__table__, User.__table__, Transaction.__table__,
+    tables = [Tenant.__table__, AuthUser.__table__, IntegrationKey.__table__, User.__table__, Transaction.__table__,
               Settings.__table__, BonusGrant.__table__, RefundRecord.__table__]
     Base.metadata.create_all(engine, tables=tables)
     with Session(engine, autoflush=False) as session:
@@ -38,6 +39,8 @@ def db():
                                   redeem_max_percent=100, tiers_json=[]),
                          Settings(tenant_id=2, earning_mode="automatic", activation_days=0)])
         session.add(AuthUser(id=1, tenant_id=1, name="Owner", phone="77000000000",
+                             role="owner", password_salt="test", password_hash="test"))
+        session.add(AuthUser(id=2, tenant_id=2, name="Other owner", phone="77000000002",
                              role="owner", password_salt="test", password_hash="test"))
         session.commit()
         yield session
@@ -387,7 +390,7 @@ def postgres_engine():
     with root_engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
     engine = root_engine.execution_options(schema_translate_map={None: schema})
-    tables = [Tenant.__table__, AuthUser.__table__, User.__table__, Transaction.__table__,
+    tables = [Tenant.__table__, AuthUser.__table__, IntegrationKey.__table__, User.__table__, Transaction.__table__,
               Settings.__table__, BonusGrant.__table__, RefundRecord.__table__]
     try:
         Base.metadata.create_all(engine, tables=tables)

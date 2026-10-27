@@ -4,7 +4,7 @@ import json
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.security import encrypt_field
@@ -19,8 +19,11 @@ from app.services.loyalty_engine import (
 )
 
 
-def _fingerprint(payload):
-    value = json.dumps(payload.model_dump(mode="json", exclude={"request_id"}), sort_keys=True)
+def _fingerprint(payload, external_id=None):
+    data = payload.model_dump(mode="json", exclude={"request_id"})
+    if external_id is not None:
+        data["external_id"] = external_id
+    value = json.dumps(data, sort_keys=True)
     return hashlib.sha256(value.encode()).hexdigest()
 
 
@@ -43,10 +46,10 @@ def _update_tier(db, user, settings):
             break
 
 
-def create_purchase(db, payload, tenant_id, network_id, actor_id, phone):
+def create_purchase(db, payload, tenant_id, network_id, actor_id, phone, *, integration_key_id=None, external_id=None):
     settings = get_settings(db, tenant_id)
     request_id = str(payload.request_id) if payload.request_id else None
-    fingerprint = _fingerprint(payload)
+    fingerprint = _fingerprint(payload, external_id)
     paid = payload.paid_amount if payload.paid_amount is not None else payload.amount
     if not phone or len(phone) != 11 or not phone.isdigit():
         raise HTTPException(422, "Укажите корректный номер телефона из 11 цифр")
@@ -60,11 +63,19 @@ def create_purchase(db, payload, tenant_id, network_id, actor_id, phone):
         if user is None:
             db.scalar(select(Tenant).where(Tenant.id == network_id).with_for_update())
             user = db.scalar(user_query.with_for_update())
-        if request_id:
-            existing = db.scalar(select(Transaction).where(
-                Transaction.tenant_id == tenant_id, Transaction.request_id == request_id,
-            ))
-            if existing:
+        if request_id or external_id:
+            matches = []
+            if request_id:
+                matches.append(Transaction.request_id == request_id)
+            if external_id:
+                matches.append(Transaction.external_id == external_id)
+            existing_rows = db.scalars(select(Transaction).where(
+                Transaction.tenant_id == tenant_id, or_(*matches),
+            )).all()
+            if len(existing_rows) > 1:
+                raise HTTPException(409, "Номер чека и идентификатор запроса относятся к разным покупкам")
+            if existing_rows:
+                existing = existing_rows[0]
                 _check_retry(existing, fingerprint)
                 existing_user = db.get(User, existing.user_id)
                 return existing, existing_user, {}, False
@@ -101,6 +112,7 @@ def create_purchase(db, payload, tenant_id, network_id, actor_id, phone):
             comment=payload.comment, status="completed", refunded_amount=0,
             earning_mode=mode, earn_percent=rate, earn_base_amount=base,
             created_by_id=actor_id, request_id=request_id, request_fingerprint=fingerprint,
+            integration_key_id=integration_key_id, external_id=external_id,
         )
         db.add(tx)
         db.flush()
@@ -118,14 +130,14 @@ def create_purchase(db, payload, tenant_id, network_id, actor_id, phone):
         raise
 
 
-def refund_purchase(db, tx_id, payload, allowed_ids, network_id, actor_id):
+def refund_purchase(db, tx_id, payload, allowed_ids, network_id, actor_id, *, integration_key_id=None, external_id=None):
     tx = db.scalar(select(Transaction).where(
         Transaction.id == tx_id, Transaction.tenant_id.in_(allowed_ids),
     ))
     if tx is None:
         raise HTTPException(404, "Транзакция не найдена")
     settings = get_settings(db, tx.tenant_id)
-    fingerprint = _fingerprint(payload)
+    fingerprint = _fingerprint(payload, external_id)
     request_id = str(payload.request_id) if payload.request_id else None
     now = _now()
     try:
@@ -137,11 +149,19 @@ def refund_purchase(db, tx_id, payload, allowed_ids, network_id, actor_id):
             raise HTTPException(404, "Клиент не найден")
         tx = db.scalar(select(Transaction).where(Transaction.id == tx_id).with_for_update()
                        .execution_options(populate_existing=True))
-        if request_id:
-            existing = db.scalar(select(RefundRecord).where(
-                RefundRecord.transaction_id == tx.id, RefundRecord.request_id == request_id,
-            ))
-            if existing:
+        if request_id or external_id:
+            matches = []
+            if request_id:
+                matches.append((RefundRecord.transaction_id == tx.id) & (RefundRecord.request_id == request_id))
+            if external_id:
+                matches.append((RefundRecord.tenant_id == tx.tenant_id) & (RefundRecord.external_id == external_id))
+            existing_rows = db.scalars(select(RefundRecord).where(or_(*matches))).all()
+            if len(existing_rows) > 1:
+                raise HTTPException(409, "Номер возврата и идентификатор запроса относятся к разным операциям")
+            if existing_rows:
+                existing = existing_rows[0]
+                if existing.transaction_id != tx.id:
+                    raise HTTPException(409, "Этот номер возврата уже использован для другой покупки")
                 _check_retry(existing, fingerprint)
                 return tx, user, {}, None
         left = tx.paid_amount - tx.refunded_amount
@@ -191,6 +211,7 @@ def refund_purchase(db, tx_id, payload, allowed_ids, network_id, actor_id):
         record = RefundRecord(transaction_id=tx.id, tenant_id=tx.tenant_id, created_by_id=actor_id,
                               request_id=request_id, request_fingerprint=fingerprint,
                               amount=amount, earned_reversed=reverse, redeemed_restored=restore,
+                              integration_key_id=integration_key_id, external_id=external_id,
                               comment=payload.comment, created_at=now)
         db.add(record)
         db.flush()
@@ -199,6 +220,9 @@ def refund_purchase(db, tx_id, payload, allowed_ids, network_id, actor_id):
         _update_tier(db, user, settings)
         db.commit()
         return tx, user, balances, record
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Номер возврата уже используется. Проверьте данные запроса") from exc
     except Exception:
         db.rollback()
         raise

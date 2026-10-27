@@ -5,9 +5,10 @@ from app.models.settings_model import Settings
 from app.models.bonus_grant import BonusGrant
 from app.models.task import Task
 from app.models.refund import RefundRecord
+from app.models.integration_key import IntegrationKey
 from app.models.wa_health import WaSessionState, WaHealthEvent
 from app.models.wa_official import WaOfficialChannel, WaCreditAccount, WaCreditLedger
 
-__all__ = ["User", "Transaction", "Settings", "BonusGrant", "Task", "RefundRecord",
+__all__ = ["User", "Transaction", "Settings", "BonusGrant", "Task", "RefundRecord", "IntegrationKey",
            "WaSessionState", "WaHealthEvent",
            "WaOfficialChannel", "WaCreditAccount", "WaCreditLedger"]

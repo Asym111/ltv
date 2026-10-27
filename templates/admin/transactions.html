@@ -360,7 +360,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td class="text-end">${t.redeem_points}</td>
         <td class="text-end">${t.earned_points}${t.earn_percent != null ? `<div class="small text-muted">${esc(t.earn_percent)}%${t.earning_mode === 'manual' ? ' · вручную' : ''}</div>` : ''}</td>
         <td>${statusBadge(t)}${refundedInfo}</td>
-        <td>${esc(t.comment || '')}</td>
+        <td>${esc(t.comment || '')}${t.external_id ? `<div class="small text-muted">${esc(t.external_id)}</div>` : ''}</td>
         <td class="text-end d-flex gap-2 justify-content-end">
           ${btnCard}
           ${btnRefund}

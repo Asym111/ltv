@@ -10,7 +10,10 @@ from app.core.database import Base
 
 class Transaction(Base):
     __tablename__ = "transactions"
-    __table_args__ = (UniqueConstraint("tenant_id", "request_id", name="uq_transactions_request"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="uq_transactions_request"),
+        UniqueConstraint("tenant_id", "external_id", name="uq_transactions_external"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -30,6 +33,8 @@ class Transaction(Base):
     created_by_id = Column(Integer, ForeignKey("auth_users.id", ondelete="SET NULL"), nullable=True)
     request_id = Column(String(36), nullable=True)
     request_fingerprint = Column(String(64), nullable=True)
+    external_id = Column(String(128), nullable=True)
+    integration_key_id = Column(Integer, ForeignKey("integration_keys.id", ondelete="SET NULL"), nullable=True)
 
     payment_method = Column(String, default="CASH", nullable=False)
     comment = Column(String, nullable=True)

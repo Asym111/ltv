@@ -42,6 +42,10 @@ def run_startup_migrations(engine: Engine) -> None:
             ("transactions", "created_by_id", "INTEGER"),
             ("transactions", "request_id", "VARCHAR(36)"),
             ("transactions", "request_fingerprint", "VARCHAR(64)"),
+            ("transactions", "external_id", "VARCHAR(128)"),
+            ("transactions", "integration_key_id", "INTEGER"),
+            ("transaction_refunds", "external_id", "VARCHAR(128)"),
+            ("transaction_refunds", "integration_key_id", "INTEGER"),
         ):
             if not _has_column(inspector, table, col):
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
@@ -60,6 +64,15 @@ def run_startup_migrations(engine: Engine) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_request "
             "ON transactions (tenant_id, request_id)"
         ))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_external "
+            "ON transactions (tenant_id, external_id)"
+        ))
+        if inspector.has_table("transaction_refunds"):
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_refunds_external "
+                "ON transaction_refunds (tenant_id, external_id)"
+            ))
         # --- users.wa_opt_out: отписка клиента от WhatsApp-рассылок ---
         if not _has_column(inspector, "users", "wa_opt_out"):
             conn.execute(text(

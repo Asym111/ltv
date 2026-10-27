@@ -2735,6 +2735,10 @@ function initSettingsPage() {
 // И в DOMContentLoaded добавить: else if (page === "accounts") initAccountsPage();
 // =========================
 function initAccountsPage() {
+  initIntegrationKeys();
+  const accountText = value => String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
 
   // ── Helpers ──────────────────────────────────────
   function v(id) { return document.getElementById(id); }
@@ -2835,11 +2839,11 @@ function initAccountsPage() {
         <tr>
           <td>
             <div class="d-flex align-items-center gap-2">
-              <div class="acc-user-avatar">${(u.name || "?")[0].toUpperCase()}</div>
-              <span class="fw-semibold">${u.name || "—"}</span>
+              <div class="acc-user-avatar">${accountText((u.name || "?")[0].toUpperCase())}</div>
+              <span class="fw-semibold">${accountText(u.name || "—")}</span>
             </div>
           </td>
-          <td class="text-muted">${u.phone || "—"}</td>
+          <td class="text-muted">${accountText(u.phone || "—")}</td>
           <td>${roleBadge(u.role)}</td>
           <td>
             ${u.is_active
@@ -2865,7 +2869,7 @@ function initAccountsPage() {
                 <i class="bi bi-${u.is_active ? "pause" : "play"}-circle"></i>
               </button>
               <button class="btn btn-sm btn-outline-danger"
-                      onclick="accDeleteUser(${u.id}, '${u.name}')"
+                      onclick="accDeleteUser(${u.id}, ${accountText(JSON.stringify(u.name || ''))})"
                       title="Удалить">
                 <i class="bi bi-trash"></i>
               </button>
@@ -2998,7 +3002,7 @@ function initAccountsPage() {
         const s = statsMap[b.id] || {};
         return `
           <tr>
-            <td class="fw-semibold">📍 ${b.name}</td>
+            <td class="fw-semibold">📍 ${accountText(b.name)}</td>
             <td>${b.is_active
               ? `<span class="badge text-bg-success">Активен</span>`
               : `<span class="badge text-bg-danger">Отключён</span>`}</td>
@@ -3012,7 +3016,7 @@ function initAccountsPage() {
                   <i class="bi bi-box-arrow-in-right"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-secondary" title="Переименовать"
-                        onclick="accRenameBranch(${b.id}, '${(b.name || "").replace(/'/g, "\\'")}')">
+                        onclick="accRenameBranch(${b.id}, ${accountText(JSON.stringify(b.name || ''))})">
                   <i class="bi bi-pencil"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-${b.is_active ? "danger" : "success"}"

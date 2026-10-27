@@ -51,6 +51,7 @@ class TransactionOut(BaseModel):
 
     id: int
     user_phone: Optional[str] = None
+    external_id: Optional[str] = None
 
     amount: int
     paid_amount: int

@@ -46,6 +46,9 @@ from app.api.whatsapp import router as whatsapp_router
 from app.api.broadcasts import router as broadcasts_router
 from app.api.reports import router as reports_router
 from app.api.tasks import router as tasks_router
+from app.api.integration import router as integration_router
+from app.api.integration_keys import router as integration_keys_router
+from app.core.integration_auth import is_integration_path
 from app.models.invites import router as invites_router
 
 from app.web.admin import router as admin_router
@@ -77,13 +80,17 @@ async def http_exception_handler(request, exc):
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
+        headers=exc.headers,
     )
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     return JSONResponse(
         status_code=422,
-        content={"detail": "Validation error", "errors": exc.errors()},
+        content={"detail": "Validation error", "errors": [
+            {"loc": error["loc"], "msg": error["msg"], "type": error["type"]}
+            for error in exc.errors()
+        ]},
     )
 
 @app.exception_handler(Exception)
@@ -201,6 +208,12 @@ class AuthGuardMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+
+        if is_integration_path(path):
+            # Only this namespace uses Bearer dependencies instead of cookies/CSRF.
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
         docs_open = not IS_PROD
         if (
@@ -466,6 +479,8 @@ app.include_router(analytics_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
+app.include_router(integration_router)
+app.include_router(integration_keys_router, prefix="/api")
 app.include_router(invites_router, prefix="/models")
 
 app.include_router(auth_router)

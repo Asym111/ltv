@@ -45,4 +45,9 @@ jobs:
           LTV_TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/ltv_test
           ENV: test
         run: |
-          pytest test/ --cov=app --cov-report=term-missing
+          python -m pytest test/ --cov=app --cov-report=term-missing
+
+      - name: Check integration JavaScript
+        run: |
+          node --check static/js/admin.js
+          node --check static/js/integration-keys.js

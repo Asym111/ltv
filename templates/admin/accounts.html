@@ -208,6 +208,50 @@
     </div>
     {% endif %}
 
+    {% if current_user and current_user.role == 'owner' %}
+    <section class="mt-3 pt-3 border-top" id="accApiKeys">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="h6 mb-0">API-ключи</div>
+        <button class="btn btn-sm btn-outline-secondary" id="apiKeyRefresh" type="button" title="Обновить ключи" aria-label="Обновить ключи"><i class="bi bi-arrow-repeat"></i></button>
+      </div>
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-7">
+          <label class="settings-label" for="apiKeyName">Название подключения</label>
+          <input id="apiKeyName" class="settings-input mt-1" maxlength="80" value="Касса Apps Script">
+        </div>
+        <div class="col-12 col-md-5">
+          <label class="settings-label" for="apiKeyDays">Срок действия</label>
+          <select id="apiKeyDays" class="settings-select mt-1">
+            <option value="30">30 дней</option><option value="90" selected>90 дней</option><option value="365">365 дней</option>
+          </select>
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-3 mt-3">
+          <label class="form-check"><input class="form-check-input" name="apiKeyScope" type="checkbox" value="balance:read" checked> Баланс</label>
+          <label class="form-check"><input class="form-check-input" name="apiKeyScope" type="checkbox" value="transactions:read" checked> Чтение чеков</label>
+          <label class="form-check"><input class="form-check-input" name="apiKeyScope" type="checkbox" value="transactions:write" checked> Покупки</label>
+          <label class="form-check"><input class="form-check-input" name="apiKeyScope" type="checkbox" value="refunds:write"> Возвраты</label>
+        </div>
+        <div class="col-12"><button id="apiKeyCreate" class="btn btn-sm btn-success" type="button"><i class="bi bi-key me-1"></i>Выпустить ключ</button></div>
+      </div>
+      <div id="apiKeyError" class="text-danger small mt-2 d-none" role="alert"></div>
+      <div id="apiKeySecretBox" class="mt-3 d-none">
+        <div class="small text-warning mb-2">Ключ создан. Повторный просмотр недоступен.</div>
+        <label class="visually-hidden" for="apiKeySecret">Новый API-ключ</label>
+        <textarea id="apiKeySecret" class="form-control font-monospace" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
+        <div class="d-flex gap-2 mt-2">
+          <button id="apiKeyCopy" class="btn btn-sm btn-outline-secondary" type="button" title="Скопировать ключ" aria-label="Скопировать ключ"><i class="bi bi-clipboard"></i></button>
+          <button id="apiKeyHide" class="btn btn-sm btn-outline-secondary" type="button" title="Скрыть ключ" aria-label="Скрыть ключ"><i class="bi bi-eye-slash"></i></button>
+        </div>
+      </div>
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Подключение</th><th>Филиал</th><th>Действует до</th><th>Последний запрос</th><th>Статус</th><th></th></tr></thead>
+          <tbody id="apiKeysBody"><tr><td colspan="6" class="text-muted">Загрузка…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
     <!-- Легенда ролей -->
     <div class="card p-3 mt-3">
       <div class="h6 mb-2">Роли и права доступа</div>
