@@ -1,7 +1,7 @@
 from __future__ import annotations
 import io
 import hashlib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
@@ -228,6 +228,7 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
             User,
             func.coalesce(func.sum(Transaction.paid_amount), 0).label("total_spent"),
             func.count(Transaction.id).label("tx_count"),
+            func.max(Transaction.created_at).label("last_purchase_at"),
         )
         .outerjoin(Transaction, Transaction.user_id == User.id)
         .filter(User.tenant_id == tenant_id)
@@ -236,11 +237,35 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Ближайшее сгорание бонусов: дата и сколько бонусов сгорит в этот день.
+    # expires_at хранится в naive-времени Алматы (UTC+5) — так же, как его пишет loyalty_engine.
+    from app.services.loyalty_engine import _now as almaty_now
+    now_local = almaty_now()
+    grant_rows = (
+        db.query(BonusGrant.user_id, BonusGrant.expires_at, BonusGrant.remaining)
+        .join(User, User.id == BonusGrant.user_id)
+        .filter(
+            User.tenant_id == tenant_id,
+            BonusGrant.status.in_(["pending", "available"]),
+            BonusGrant.remaining > 0,
+            BonusGrant.expires_at > now_local,
+        )
+        .all()
+    )
+    burn_map: dict[int, tuple[date, int]] = {}
+    for uid, expires_at, remaining in grant_rows:
+        d = expires_at.date()
+        cur = burn_map.get(uid)
+        if cur is None or d < cur[0]:
+            burn_map[uid] = (d, int(remaining))
+        elif d == cur[0]:
+            burn_map[uid] = (d, cur[1] + int(remaining))
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Клиенты"
 
-    headers = ["ID", "Телефон", "Имя", "Дата рождения", "Уровень", "Бонусный баланс", "Сумма покупок", "Кол-во покупок"]
+    headers = ["ID", "Телефон", "Имя", "Дата рождения", "Уровень", "Бонусный баланс", "Сумма покупок", "Кол-во покупок", "Последняя покупка", "Сгорание бонусов", "Сгорит бонусов"]
     header_fill = PatternFill("solid", start_color="1E3A5F")
     header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
 
@@ -252,7 +277,8 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
 
     ws.row_dimensions[1].height = 22
 
-    for row_idx, (user, total_spent, tx_count) in enumerate(rows, 2):
+    almaty = timezone(timedelta(hours=5))  # created_at хранится в UTC
+    for row_idx, (user, total_spent, tx_count, last_purchase_at) in enumerate(rows, 2):
         birth = user.birth_date.strftime("%d.%m.%Y") if user.birth_date else ""
         ws.cell(row=row_idx, column=1, value=user.id)
         ws.cell(row=row_idx, column=2, value=decrypt_field(user.phone) or user.phone)
@@ -262,13 +288,24 @@ def export_users_excel(request: Request, db: Session = Depends(get_db)):
         ws.cell(row=row_idx, column=6, value=user.bonus_balance or 0)
         ws.cell(row=row_idx, column=7, value=int(total_spent))
         ws.cell(row=row_idx, column=8, value=int(tx_count))
+        if last_purchase_at:
+            last_local = last_purchase_at.replace(tzinfo=timezone.utc).astimezone(almaty).date()
+            last_cell = ws.cell(row=row_idx, column=9, value=last_local)
+            last_cell.number_format = "DD.MM.YYYY"
+            last_cell.alignment = Alignment(horizontal="center")
+        burn = burn_map.get(user.id)
+        if burn:
+            burn_cell = ws.cell(row=row_idx, column=10, value=burn[0])
+            burn_cell.number_format = "DD.MM.YYYY"
+            burn_cell.alignment = Alignment(horizontal="center")
+            ws.cell(row=row_idx, column=11, value=burn[1])
 
         if row_idx % 2 == 0:
             row_fill = PatternFill("solid", start_color="F0F4FA")
-            for col in range(1, 9):
+            for col in range(1, len(headers) + 1):
                 ws.cell(row=row_idx, column=col).fill = row_fill
 
-    col_widths = [8, 18, 28, 16, 12, 18, 18, 16]
+    col_widths = [8, 18, 28, 16, 12, 18, 18, 16, 18, 18, 16]
     for col, width in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = width
 
