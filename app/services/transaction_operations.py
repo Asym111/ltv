@@ -15,7 +15,7 @@ from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.loyalty_engine import (
     _now, consume_available, get_balances, get_settings,
-    grant_purchase_bonus, purchase_earning, redeem_cap,
+    extend_active_bonuses, grant_purchase_bonus, purchase_earning, redeem_cap,
 )
 
 
@@ -116,6 +116,8 @@ def create_purchase(db, payload, tenant_id, network_id, actor_id, phone, *, inte
         )
         db.add(tx)
         db.flush()
+        # Любая покупка продлевает срок жизни всех действующих бонусов клиента
+        extend_active_bonuses(db, user.id, settings, commit=False)
         grant_purchase_bonus(db, user.id, earned, settings, txn_id=tx.id, tenant_id=tenant_id, commit=False)
         balances = get_balances(db, user.id, commit=False)
         user.bonus_balance = balances["total"]
