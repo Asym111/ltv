@@ -318,6 +318,42 @@ def redeem_cap(paid_amount: int, settings: Settings) -> int:
     return int(paid_amount * pct // 100)
 
 
+def extend_active_bonuses(
+    db: Session,
+    user_id: int,
+    settings: Settings,
+    now: datetime | None = None,
+    *,
+    commit: bool = True,
+) -> int:
+    """
+    Покупка продлевает срок жизни ВСЕХ действующих бонусов клиента
+    (pending/available с остатком > 0 и не истёкших) до того же срока,
+    что получают бонусы с новой покупки: now + activation_days + burn_days.
+    Срок только продлевается — никогда не сокращается.
+    Возвращает количество продлённых начислений.
+    """
+    now = now or _now()
+    activation_days = max(0, int(settings.activation_days or 0))
+    burn_days = max(1, int(settings.burn_days or 365))
+    new_expires_at = now + timedelta(days=activation_days + burn_days)
+
+    grants = db.scalars(
+        select(BonusGrant).where(
+            BonusGrant.user_id == user_id,
+            BonusGrant.status.in_(["pending", "available"]),
+            BonusGrant.remaining > 0,
+            BonusGrant.expires_at > now,
+            BonusGrant.expires_at < new_expires_at,
+        )
+    ).all()
+    for g in grants:
+        g.expires_at = new_expires_at
+
+    db.commit() if commit else db.flush()
+    return len(grants)
+
+
 def grant_purchase_bonus(
     db: Session,
     user_id: int,
